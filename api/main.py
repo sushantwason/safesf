@@ -71,10 +71,38 @@ DATA_CACHE = None
 
 
 def load_data(data_dir: str = "data"):
-    """Load 311 data from parquet file on startup"""
+    """Load 311 data from GCS or local parquet file on startup"""
     global DATA_CACHE
 
-    # Try multiple possible locations
+    # Try to load from Google Cloud Storage first
+    gcs_bucket = os.getenv('GCP_BUCKET', 'sf-311-data-personal')
+    gcs_file = '311_historical.parquet'
+
+    try:
+        from google.cloud import storage
+
+        logger.info(f"Attempting to load data from GCS: gs://{gcs_bucket}/{gcs_file}")
+
+        # Initialize GCS client
+        client = storage.Client()
+        bucket = client.bucket(gcs_bucket)
+        blob = bucket.blob(gcs_file)
+
+        # Download to bytes and load with pandas
+        data_bytes = blob.download_as_bytes()
+        import io
+        DATA_CACHE = pd.read_parquet(io.BytesIO(data_bytes))
+
+        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records from GCS: gs://{gcs_bucket}/{gcs_file}")
+        logger.info(f"Date range: {DATA_CACHE['opened'].min()} to {DATA_CACHE['opened'].max()}")
+        logger.info(f"Categories: {DATA_CACHE['category'].nunique()}")
+        return
+
+    except Exception as e:
+        logger.warning(f"Could not load from GCS: {e}")
+        logger.info("Falling back to local file...")
+
+    # Fallback to local files
     possible_paths = [
         Path(data_dir),
         Path("/app") / data_dir,
@@ -90,8 +118,6 @@ def load_data(data_dir: str = "data"):
                 logger.info(f"Found {len(files)} parquet files in {data_path}")
                 data_files.extend(files)
                 break
-        else:
-            logger.warning(f"Path does not exist: {data_path}")
 
     if not data_files:
         logger.warning(f"No data files found in any location")
