@@ -75,25 +75,15 @@ def load_data(data_dir: str = "data"):
     global DATA_CACHE
 
     # Try to load from Google Cloud Storage first
-    gcs_bucket = os.getenv('GCP_BUCKET', 'sf-311-data-personal')
-    gcs_file = '311_historical.parquet'
+    gcs_path = "gs://sf-311-data-personal/311_historical.parquet"
 
     try:
-        from google.cloud import storage
+        logger.info(f"Attempting to load data from GCS: {gcs_path}")
 
-        logger.info(f"Attempting to load data from GCS: gs://{gcs_bucket}/{gcs_file}")
+        # pandas can read directly from GCS with gcsfs
+        DATA_CACHE = pd.read_parquet(gcs_path)
 
-        # Initialize GCS client
-        client = storage.Client()
-        bucket = client.bucket(gcs_bucket)
-        blob = bucket.blob(gcs_file)
-
-        # Download to bytes and load with pandas
-        data_bytes = blob.download_as_bytes()
-        import io
-        DATA_CACHE = pd.read_parquet(io.BytesIO(data_bytes))
-
-        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records from GCS: gs://{gcs_bucket}/{gcs_file}")
+        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records from GCS")
         logger.info(f"Date range: {DATA_CACHE['opened'].min()} to {DATA_CACHE['opened'].max()}")
         logger.info(f"Categories: {DATA_CACHE['category'].nunique()}")
         return
