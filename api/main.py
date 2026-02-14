@@ -74,13 +74,27 @@ def load_data(data_dir: str = "data"):
     """Load 311 data from parquet file on startup"""
     global DATA_CACHE
 
-    data_path = Path(data_dir)
+    # Try multiple possible locations
+    possible_paths = [
+        Path(data_dir),
+        Path("/app") / data_dir,
+        Path(__file__).parent.parent / data_dir
+    ]
 
-    # Try different possible data files
-    data_files = list(data_path.glob("311*.parquet"))
+    data_files = []
+    for data_path in possible_paths:
+        if data_path.exists():
+            logger.info(f"Checking {data_path} for data files...")
+            files = list(data_path.glob("*.parquet"))
+            if files:
+                logger.info(f"Found {len(files)} parquet files in {data_path}")
+                data_files.extend(files)
+                break
+        else:
+            logger.warning(f"Path does not exist: {data_path}")
 
     if not data_files:
-        logger.warning(f"No data files found in {data_dir}")
+        logger.warning(f"No data files found in any location")
         return
 
     # Load the largest file (most data)
@@ -88,7 +102,7 @@ def load_data(data_dir: str = "data"):
 
     try:
         DATA_CACHE = pd.read_parquet(data_file)
-        logger.info(f"Loaded {len(DATA_CACHE):,} records from {data_file.name}")
+        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records from {data_file.name}")
         logger.info(f"Date range: {DATA_CACHE['opened'].min()} to {DATA_CACHE['opened'].max()}")
         logger.info(f"Categories: {DATA_CACHE['category'].nunique()}")
     except Exception as e:
