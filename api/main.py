@@ -3,7 +3,8 @@ FastAPI backend for SF 311 Prediction Service
 """
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -69,6 +70,31 @@ METADATA = {}
 DATA_CACHE = None
 
 
+def load_data(data_dir: str = "data"):
+    """Load 311 data from parquet file on startup"""
+    global DATA_CACHE
+
+    data_path = Path(data_dir)
+
+    # Try different possible data files
+    data_files = list(data_path.glob("311*.parquet"))
+
+    if not data_files:
+        logger.warning(f"No data files found in {data_dir}")
+        return
+
+    # Load the largest file (most data)
+    data_file = max(data_files, key=lambda p: p.stat().st_size)
+
+    try:
+        DATA_CACHE = pd.read_parquet(data_file)
+        logger.info(f"Loaded {len(DATA_CACHE):,} records from {data_file.name}")
+        logger.info(f"Date range: {DATA_CACHE['opened'].min()} to {DATA_CACHE['opened'].max()}")
+        logger.info(f"Categories: {DATA_CACHE['category'].nunique()}")
+    except Exception as e:
+        logger.error(f"Error loading data: {e}")
+
+
 def load_models(models_dir: str = "models"):
     """Load trained models on startup"""
     global MODELS, METADATA
@@ -111,6 +137,7 @@ def load_models(models_dir: str = "models"):
 async def startup_event():
     """Initialize application on startup"""
     logger.info("🚀 Starting SF 311 Predictor API...")
+    load_data()
     load_models()
     logger.info("✅ Application ready!")
 
@@ -141,11 +168,30 @@ async def health_check():
 
 @app.get("/api/categories")
 async def get_categories():
-    """Get available categories for prediction"""
+    """Get available categories"""
+    global DATA_CACHE
+
+    # Try to get from loaded data first
+    if DATA_CACHE is not None and not DATA_CACHE.empty:
+        categories = DATA_CACHE['category'].unique().tolist()
+        category_counts = DATA_CACHE['category'].value_counts().to_dict()
+
+        return {
+            "categories": categories,
+            "total": len(categories),
+            "counts": category_counts
+        }
+
+    # Fallback to metadata
     categories = METADATA.get('categories', [])
 
     if not categories:
-        raise HTTPException(status_code=503, detail="No categories available")
+        # Return empty list instead of error
+        return {
+            "categories": [],
+            "total": 0,
+            "message": "No data loaded yet"
+        }
 
     return {
         "categories": categories,
@@ -340,25 +386,76 @@ async def predict_hotspots(
     }
 
 
+@app.get("/api/data/recent")
+async def get_recent_data(limit: int = Query(100, ge=1, le=1000)):
+    """Get recent 311 service requests"""
+    global DATA_CACHE
+
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+
+    # Get most recent records
+    df = DATA_CACHE.sort_values('opened', ascending=False).head(limit)
+
+    records = []
+    for _, row in df.iterrows():
+        records.append({
+            'id': row.get('service_request_id', 'N/A'),
+            'category': row.get('category', 'Unknown'),
+            'status': row.get('status_description', 'Unknown'),
+            'opened': row['opened'].isoformat() if pd.notna(row.get('opened')) else None,
+            'closed': row['closed'].isoformat() if pd.notna(row.get('closed')) else None,
+            'address': row.get('address', 'N/A'),
+            'district': row.get('supervisor_district', 'N/A'),
+            'latitude': float(row['latitude']) if pd.notna(row.get('latitude')) else None,
+            'longitude': float(row['longitude']) if pd.notna(row.get('longitude')) else None,
+        })
+
+    return {
+        'total': len(records),
+        'limit': limit,
+        'data': records
+    }
+
+
 @app.get("/api/data/stats")
 async def get_data_stats():
     """Get statistics about the underlying data"""
-    metrics = METADATA.get('metrics', {})
+    global DATA_CACHE
 
-    stats = {
-        'models_trained': len(metrics),
-        'categories': []
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        # Return stats from metadata if no data loaded
+        metrics = METADATA.get('metrics', {})
+        return {
+            'models_trained': len(metrics),
+            'categories': [],
+            'total_requests': 0,
+            'date_range': {}
+        }
+
+    # Calculate stats from actual data
+    total = len(DATA_CACHE)
+    categories = DATA_CACHE['category'].value_counts().to_dict()
+
+    date_range = {
+        'start': DATA_CACHE['opened'].min().isoformat() if pd.notna(DATA_CACHE['opened'].min()) else None,
+        'end': DATA_CACHE['opened'].max().isoformat() if pd.notna(DATA_CACHE['opened'].max()) else None
     }
 
-    for category, category_metrics in metrics.items():
-        stats['categories'].append({
-            'name': category,
-            'sample_count': category_metrics.get('sample_count', 0),
-            'xgboost_mae': category_metrics.get('xgboost', {}).get('mae', 0),
-            'prophet_mae': category_metrics.get('prophet', {}).get('mae', 0)
-        })
+    # Calculate daily average
+    if 'opened' in DATA_CACHE.columns:
+        days = (DATA_CACHE['opened'].max() - DATA_CACHE['opened'].min()).days + 1
+        daily_avg = total / max(days, 1)
+    else:
+        daily_avg = 0
 
-    return stats
+    return {
+        'total_requests': total,
+        'categories': categories,
+        'date_range': date_range,
+        'daily_average': round(daily_avg, 2),
+        'top_categories': dict(list(categories.items())[:10])
+    }
 
 
 @app.get("/metrics")
@@ -369,6 +466,26 @@ async def get_metrics():
         "categories_available": len(METADATA.get('categories', [])),
         "uptime_seconds": 0  # Placeholder
     }
+
+
+# Mount static files for frontend
+frontend_path = Path(__file__).parent.parent / "frontend"
+if frontend_path.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+    logger.info(f"Serving frontend from {frontend_path}")
+
+    @app.get("/")
+    async def serve_frontend():
+        """Serve the frontend dashboard"""
+        index_file = frontend_path / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+        return {
+            "service": "SF 311 Predictor API",
+            "version": "1.0.0",
+            "docs": "/docs",
+            "health": "/health"
+        }
 
 
 if __name__ == "__main__":
