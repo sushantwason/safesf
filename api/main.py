@@ -74,14 +74,14 @@ def load_data(data_dir: str = "data"):
     """Load 311 data from GCS or local parquet file on startup"""
     global DATA_CACHE
 
-    # Try to load from Google Cloud Storage first
-    gcs_path = "gs://sf-311-data-personal/311_historical.parquet"
+    # Try to load from Google Cloud Storage via public HTTP URL
+    gcs_http_url = "https://storage.googleapis.com/sf-311-data-personal/311_historical.parquet"
 
     try:
-        logger.info(f"Attempting to load data from GCS: {gcs_path}")
+        logger.info(f"Attempting to load data from GCS via HTTP: {gcs_http_url}")
 
-        # pandas can read directly from GCS with gcsfs
-        DATA_CACHE = pd.read_parquet(gcs_path)
+        # Download and load with pandas
+        DATA_CACHE = pd.read_parquet(gcs_http_url)
 
         logger.info(f"✅ Loaded {len(DATA_CACHE):,} records from GCS")
         logger.info(f"Date range: {DATA_CACHE['opened'].min()} to {DATA_CACHE['opened'].max()}")
