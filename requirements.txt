@@ -23,11 +23,7 @@ shapely==2.0.2
 pyproj==3.6.1
 
 # GCP
-google-cloud-bigquery==3.17.1
 google-cloud-storage==2.14.0
-google-cloud-logging==3.9.0
-google-auth==2.27.0
-fsspec==2024.2.0
 gcsfs==2024.2.0
 
 # Visualization & Data
