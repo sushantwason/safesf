@@ -29,12 +29,21 @@ class SF311DataFetcher:
         self.dataset_id = os.getenv('SF_OPEN_DATA_DATASET_ID', 'vw6y-z8j6')
         self.app_token = os.getenv('SF_OPEN_DATA_APP_TOKEN')
 
-        # Initialize Socrata client
-        self.client = Socrata(
-            self.domain,
-            self.app_token,
-            timeout=60
-        )
+        # Initialize Socrata client (token is optional but recommended)
+        if self.app_token and self.app_token != 'YOUR_TOKEN_HERE':
+            logger.info("Using authenticated API access")
+            self.client = Socrata(
+                self.domain,
+                self.app_token,
+                timeout=60
+            )
+        else:
+            logger.warning("No API token found - using unauthenticated access (rate limited)")
+            self.client = Socrata(
+                self.domain,
+                app_token=None,
+                timeout=60
+            )
 
     def fetch_data(self, start_date: str, end_date: str, limit: int = 1000000) -> pd.DataFrame:
         """
@@ -50,15 +59,15 @@ class SF311DataFetcher:
         """
         logger.info(f"Fetching 311 data from {start_date} to {end_date}")
 
-        # Build SoQL query
-        where_clause = f"opened >= '{start_date}T00:00:00' AND opened <= '{end_date}T23:59:59'"
+        # Build SoQL query (use requested_datetime, not opened)
+        where_clause = f"requested_datetime >= '{start_date}T00:00:00' AND requested_datetime <= '{end_date}T23:59:59'"
 
         try:
             results = self.client.get(
                 self.dataset_id,
                 where=where_clause,
                 limit=limit,
-                order="opened DESC"
+                order="requested_datetime DESC"
             )
 
             df = pd.DataFrame.from_records(results)
@@ -74,10 +83,11 @@ class SF311DataFetcher:
         """Clean and preprocess 311 data"""
         logger.info("Cleaning data...")
 
-        # Parse dates
-        df['opened'] = pd.to_datetime(df['opened'])
-        if 'closed' in df.columns:
-            df['closed'] = pd.to_datetime(df['closed'], errors='coerce')
+        # Parse dates (use requested_datetime instead of opened)
+        if 'requested_datetime' in df.columns:
+            df['opened'] = pd.to_datetime(df['requested_datetime'])
+        if 'closed_date' in df.columns:
+            df['closed'] = pd.to_datetime(df['closed_date'], errors='coerce')
 
         # Extract temporal features
         df['year'] = df['opened'].dt.year
@@ -87,9 +97,13 @@ class SF311DataFetcher:
         df['day_of_week'] = df['opened'].dt.dayofweek
         df['week_of_year'] = df['opened'].dt.isocalendar().week
 
-        # Clean categories
-        if 'category' in df.columns:
+        # Clean categories (use service_name as category)
+        if 'service_name' in df.columns:
+            df['category'] = df['service_name'].fillna('Unknown')
+        elif 'category' in df.columns:
             df['category'] = df['category'].fillna('Unknown')
+        else:
+            df['category'] = 'Unknown'
 
         # Handle coordinates
         if 'point' in df.columns:
