@@ -43,7 +43,7 @@ Thumbs.db
 
 # Project specific
 data/*.csv
-# data/*.parquet  # Allow parquet files for deployment
+# Allow parquet files for deployment (removed: data/*.parquet)
 *.pkl
 .env
 !.env.example
