@@ -36,8 +36,14 @@ COPY api/ ./api/
 COPY frontend/ ./frontend/
 COPY scripts/ ./scripts/
 COPY models/ ./models/
-COPY data/ ./data/
 COPY .env.example .env
+
+# Create data directory and copy parquet files explicitly
+RUN mkdir -p data
+COPY data/311*.parquet ./data/
+
+# List data files to verify (debugging)
+RUN ls -lh ./data/ || echo "No data directory"
 
 # Expose port
 EXPOSE 8080
