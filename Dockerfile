@@ -38,12 +38,8 @@ COPY scripts/ ./scripts/
 COPY models/ ./models/
 COPY .env.example .env
 
-# Create data directory and copy parquet files explicitly
+# Create data directory (data now loaded from GCS, not local files)
 RUN mkdir -p data
-COPY data/311*.parquet ./data/
-
-# List data files to verify (debugging)
-RUN ls -lh ./data/ || echo "No data directory"
 
 # Expose port
 EXPOSE 8080
