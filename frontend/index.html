@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SF 311 Request Predictor</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-blue-600 text-white shadow-lg">
+            <div class="container mx-auto px-4 py-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold flex items-center">
+                            <i class="fas fa-chart-line mr-3"></i>
+                            SF 311 Request Predictor
+                        </h1>
+                        <p class="text-blue-100 mt-1">Predictive analytics for San Francisco 311 service requests</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm text-blue-100">Powered by SF Open Data</div>
+                        <div class="text-xs text-blue-200 mt-1">Updated daily at 6am PT</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Status Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-green-100 rounded-lg">
+                            <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-gray-500 text-sm">System Status</p>
+                            <p class="text-2xl font-bold text-gray-800" id="systemStatus">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-blue-100 rounded-lg">
+                            <i class="fas fa-layer-group text-blue-600 text-2xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-gray-500 text-sm">Categories</p>
+                            <p class="text-2xl font-bold text-gray-800" id="categoriesCount">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-purple-100 rounded-lg">
+                            <i class="fas fa-robot text-purple-600 text-2xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-gray-500 text-sm">Models Loaded</p>
+                            <p class="text-2xl font-bold text-gray-800" id="modelsCount">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-orange-100 rounded-lg">
+                            <i class="fas fa-calendar-alt text-orange-600 text-2xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-gray-500 text-sm">Forecast Days</p>
+                            <p class="text-2xl font-bold text-gray-800">7-30</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prediction Controls -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">
+                    <i class="fas fa-sliders-h mr-2"></i>
+                    Prediction Controls
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                        <select id="categorySelect" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
+                            <option value="">Loading categories...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Forecast Days</label>
+                        <input type="number" id="forecastDays" value="7" min="1" max="30"
+                               class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Model</label>
+                        <select id="modelSelect" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
+                            <option value="prophet">Prophet (Time Series)</option>
+                            <option value="xgboost">XGBoost (ML)</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="getPrediction()"
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200">
+                            <i class="fas fa-magic mr-2"></i>
+                            Generate Prediction
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prediction Chart -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">
+                    <i class="fas fa-chart-area mr-2"></i>
+                    Volume Prediction
+                </h2>
+                <div id="predictionChart" class="h-96"></div>
+            </div>
+
+            <!-- Trends Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-trending-up mr-2"></i>
+                        30-Day Trends
+                    </h2>
+                    <div id="trendsContainer" class="space-y-3">
+                        <p class="text-gray-500 text-center py-8">Select a category to view trends</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-map-marked-alt mr-2"></i>
+                        Predicted Hotspots
+                    </h2>
+                    <div id="hotspotsContainer" class="space-y-3">
+                        <p class="text-gray-500 text-center py-8">Loading hotspot predictions...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Performance -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">
+                    <i class="fas fa-chart-bar mr-2"></i>
+                    Model Performance Metrics
+                </h2>
+                <div id="metricsTable" class="overflow-x-auto">
+                    <p class="text-gray-500 text-center py-8">Loading metrics...</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-800 text-white mt-12">
+            <div class="container mx-auto px-4 py-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <p class="text-sm">Built with SF Open Data for the public good</p>
+                        <p class="text-xs text-gray-400 mt-1">Data updated nightly from data.sfgov.org</p>
+                    </div>
+                    <div class="flex space-x-4">
+                        <a href="https://data.sfgov.org/" target="_blank" class="text-gray-400 hover:text-white transition">
+                            <i class="fas fa-database"></i> Data Source
+                        </a>
+                        <a href="/docs" class="text-gray-400 hover:text-white transition">
+                            <i class="fas fa-book"></i> API Docs
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;  // Adjust for your deployment
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkHealth();
+            await loadCategories();
+            await loadHotspots();
+            await loadMetrics();
+        });
+
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+
+                document.getElementById('systemStatus').textContent = data.status === 'healthy' ? 'Healthy' : 'Warning';
+                document.getElementById('categoriesCount').textContent = data.categories_available.length;
+                document.getElementById('modelsCount').textContent = data.models_loaded;
+            } catch (error) {
+                console.error('Health check failed:', error);
+                document.getElementById('systemStatus').textContent = 'Error';
+            }
+        }
+
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_URL}/api/categories`);
+                const data = await response.json();
+
+                const select = document.getElementById('categorySelect');
+                select.innerHTML = data.categories.map(cat =>
+                    `<option value="${cat}">${cat}</option>`
+                ).join('');
+            } catch (error) {
+                console.error('Failed to load categories:', error);
+            }
+        }
+
+        async function getPrediction() {
+            const category = document.getElementById('categorySelect').value;
+            const days = document.getElementById('forecastDays').value;
+            const model = document.getElementById('modelSelect').value;
+
+            if (!category) {
+                alert('Please select a category');
+                return;
+            }
+
+            try {
+                const response = await fetch(
+                    `${API_URL}/api/predict/volume?category=${encodeURIComponent(category)}&days=${days}&model=${model}`
+                );
+                const data = await response.json();
+
+                // Plot predictions
+                plotPrediction(data);
+
+                // Load trends for this category
+                loadTrends(category);
+
+            } catch (error) {
+                console.error('Prediction failed:', error);
+                alert('Prediction failed: ' + error.message);
+            }
+        }
+
+        function plotPrediction(data) {
+            const dates = data.predictions.map(p => p.date);
+            const volumes = data.predictions.map(p => p.predicted_volume);
+            const lowerBounds = data.predictions.map(p => p.lower_bound || p.predicted_volume * 0.8);
+            const upperBounds = data.predictions.map(p => p.upper_bound || p.predicted_volume * 1.2);
+
+            const traces = [
+                {
+                    x: dates,
+                    y: volumes,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Predicted Volume',
+                    line: { color: '#2563eb', width: 3 },
+                    marker: { size: 8 }
+                },
+                {
+                    x: dates,
+                    y: upperBounds,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Upper Bound',
+                    line: { color: '#93c5fd', width: 1, dash: 'dash' },
+                    fill: 'tonexty',
+                    fillcolor: 'rgba(37, 99, 235, 0.1)'
+                },
+                {
+                    x: dates,
+                    y: lowerBounds,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Lower Bound',
+                    line: { color: '#93c5fd', width: 1, dash: 'dash' }
+                }
+            ];
+
+            const layout = {
+                title: `Predicted 311 Requests: ${data.category}`,
+                xaxis: { title: 'Date' },
+                yaxis: { title: 'Number of Requests' },
+                hovermode: 'x unified',
+                showlegend: true
+            };
+
+            Plotly.newPlot('predictionChart', traces, layout, { responsive: true });
+        }
+
+        async function loadTrends(category = 'all') {
+            try {
+                const response = await fetch(`${API_URL}/api/predict/trends?category=${category}&timeframe=30d`);
+                const data = await response.json();
+
+                const container = document.getElementById('trendsContainer');
+                container.innerHTML = Object.entries(data.trends).map(([cat, trend]) => `
+                    <div class="border-l-4 ${trend.direction === 'increasing' ? 'border-red-500' : 'border-green-500'} pl-4 py-2">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-gray-800">${cat}</span>
+                            <span class="text-sm ${trend.direction === 'increasing' ? 'text-red-600' : 'text-green-600'}">
+                                <i class="fas fa-arrow-${trend.direction === 'increasing' ? 'up' : 'down'}"></i>
+                                ${trend.magnitude_percent}%
+                            </span>
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1">
+                            Predicted total: ${trend.predicted_total} | Daily avg: ${trend.daily_average}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load trends:', error);
+            }
+        }
+
+        async function loadHotspots() {
+            try {
+                const response = await fetch(`${API_URL}/api/predict/hotspots?top_n=5`);
+                const data = await response.json();
+
+                const container = document.getElementById('hotspotsContainer');
+                container.innerHTML = data.hotspots.map((spot, idx) => `
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-semibold">
+                                    #${idx + 1}
+                                </span>
+                                <h3 class="font-semibold text-gray-800 mt-2">${spot.neighborhood}</h3>
+                                <p class="text-sm text-gray-600">Predicted volume: ${spot.predicted_volume}</p>
+                            </div>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-1">
+                            ${spot.top_categories.map(cat =>
+                                `<span class="text-xs bg-gray-200 px-2 py-1 rounded">${cat}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load hotspots:', error);
+            }
+        }
+
+        async function loadMetrics() {
+            try {
+                const response = await fetch(`${API_URL}/api/data/stats`);
+                const data = await response.json();
+
+                const table = `
+                    <table class="min-w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sample Count</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">XGBoost MAE</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prophet MAE</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${data.categories.map(cat => `
+                                <tr>
+                                    <td class="px-6 py-4 text-sm text-gray-900">${cat.name}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-600">${cat.sample_count.toLocaleString()}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-600">${cat.xgboost_mae.toFixed(2)}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-600">${cat.prophet_mae.toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                document.getElementById('metricsTable').innerHTML = table;
+            } catch (error) {
+                console.error('Failed to load metrics:', error);
+            }
+        }
+    </script>
+</body>
+</html>
