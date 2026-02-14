@@ -172,15 +172,7 @@ async def startup_event():
     logger.info("✅ Application ready!")
 
 
-@app.get("/", response_model=Dict[str, str])
-async def root():
-    """Root endpoint"""
-    return {
-        "service": "SF 311 Predictor API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health"
-    }
+# Root endpoint moved to bottom to serve frontend dashboard instead
 
 
 @app.get("/health", response_model=HealthResponse)
