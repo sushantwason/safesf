@@ -36,13 +36,8 @@ COPY api/ ./api/
 COPY frontend/ ./frontend/
 COPY scripts/ ./scripts/
 COPY models/ ./models/
+COPY data/ ./data/
 COPY .env.example .env
-
-# Create directory for data
-RUN mkdir -p data
-
-# Copy sample data (small file for demo)
-COPY data/311_sample.parquet ./data/ 2>/dev/null || echo "No sample data found"
 
 # Expose port
 EXPOSE 8080
