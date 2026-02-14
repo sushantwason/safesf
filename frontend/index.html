@@ -31,6 +31,49 @@
 
         <!-- Main Content -->
         <main class="container mx-auto px-4 py-8">
+            <!-- Introduction Section -->
+            <div class="bg-blue-50 border-l-4 border-blue-500 rounded-lg shadow p-6 mb-8">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-blue-500 text-3xl"></i>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-3">
+                            <i class="fas fa-bullseye mr-2 text-blue-600"></i>
+                            About This Tool
+                        </h2>
+                        <p class="text-gray-700 text-lg mb-4">
+                            This dashboard helps you understand <strong>San Francisco's 311 service requests</strong> - the non-emergency issues residents report to the city like potholes, graffiti, street cleaning, illegal dumping, and more.
+                        </p>
+
+                        <div class="bg-white rounded-lg p-4 mb-4">
+                            <h3 class="font-semibold text-gray-800 mb-2">✅ What You Can Do:</h3>
+                            <ul class="space-y-2 text-gray-700">
+                                <li><i class="fas fa-chart-line text-green-600 mr-2"></i>Explore <strong>50,000+ real 311 requests</strong> from the past 3 weeks</li>
+                                <li><i class="fas fa-map-marked-alt text-green-600 mr-2"></i>See which neighborhoods need the most city services</li>
+                                <li><i class="fas fa-search text-green-600 mr-2"></i>Identify trends and patterns in service requests</li>
+                                <li><i class="fas fa-clock text-blue-600 mr-2"></i><em>[Future]</em> Predict future service demand to help the city plan resources</li>
+                            </ul>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                            <div class="bg-gradient-to-r from-blue-100 to-blue-50 p-3 rounded-lg">
+                                <div class="font-semibold text-gray-700">Data Period</div>
+                                <div class="text-gray-800">Jan 23 - Feb 13, 2026</div>
+                            </div>
+                            <div class="bg-gradient-to-r from-green-100 to-green-50 p-3 rounded-lg">
+                                <div class="font-semibold text-gray-700">Total Requests</div>
+                                <div class="text-gray-800" id="introTotalRequests">50,000</div>
+                            </div>
+                            <div class="bg-gradient-to-r from-purple-100 to-purple-50 p-3 rounded-lg">
+                                <div class="font-semibold text-gray-700">Daily Average</div>
+                                <div class="text-gray-800" id="introDailyAvg">2,273 requests/day</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Status Cards -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div class="bg-white rounded-lg shadow p-6">
@@ -51,7 +94,7 @@
                             <i class="fas fa-layer-group text-blue-600 text-2xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-gray-500 text-sm">Categories</p>
+                            <p class="text-gray-500 text-sm">Request Types</p>
                             <p class="text-2xl font-bold text-gray-800" id="categoriesCount">-</p>
                         </div>
                     </div>
@@ -60,11 +103,11 @@
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="flex items-center">
                         <div class="p-3 bg-purple-100 rounded-lg">
-                            <i class="fas fa-robot text-purple-600 text-2xl"></i>
+                            <i class="fas fa-database text-purple-600 text-2xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-gray-500 text-sm">Models Loaded</p>
-                            <p class="text-2xl font-bold text-gray-800" id="modelsCount">-</p>
+                            <p class="text-gray-500 text-sm">Total Requests</p>
+                            <p class="text-2xl font-bold text-gray-800" id="totalRequestsCount">50,000</p>
                         </div>
                     </div>
                 </div>
@@ -72,12 +115,119 @@
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="flex items-center">
                         <div class="p-3 bg-orange-100 rounded-lg">
-                            <i class="fas fa-calendar-alt text-orange-600 text-2xl"></i>
+                            <i class="fas fa-chart-bar text-orange-600 text-2xl"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-gray-500 text-sm">Forecast Days</p>
-                            <p class="text-2xl font-bold text-gray-800">7-30</p>
+                            <p class="text-gray-500 text-sm">Daily Average</p>
+                            <p class="text-2xl font-bold text-gray-800" id="dailyAvgCount">2,273</p>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historical Data Dashboard -->
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-history mr-2 text-blue-600"></i>
+                    Historical Data (Real 311 Requests)
+                </h2>
+
+                <!-- Volume Over Time -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800">
+                                <i class="fas fa-chart-line mr-2 text-blue-600"></i>
+                                Request Volume Over Time
+                            </h3>
+                            <p class="text-gray-600 text-sm mt-1">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                Daily count of 311 requests. Spikes may indicate city events, weather issues, or service problems.
+                            </p>
+                        </div>
+                    </div>
+                    <div id="historicalVolumeChart" class="h-96"></div>
+                </div>
+
+                <!-- Two column layout for Category and Recent -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <!-- Top Categories -->
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">
+                            <i class="fas fa-list-ol mr-2 text-green-600"></i>
+                            Top Request Categories
+                        </h3>
+                        <p class="text-gray-600 text-sm mb-4">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Most common types of 311 requests submitted by SF residents.
+                        </p>
+                        <div id="categoriesChart" class="h-96"></div>
+                    </div>
+
+                    <!-- Geographic Distribution -->
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">
+                            <i class="fas fa-map-marked-alt mr-2 text-purple-600"></i>
+                            Requests by District
+                        </h3>
+                        <p class="text-gray-600 text-sm mb-4">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Service request distribution across SF's 11 supervisor districts.
+                        </p>
+                        <div id="geographicChart" class="h-96"></div>
+                    </div>
+                </div>
+
+                <!-- Recent Requests Table -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-2">
+                        <i class="fas fa-stream mr-2 text-orange-600"></i>
+                        Recent Service Requests
+                    </h3>
+                    <p class="text-gray-600 text-sm mb-4">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Latest 20 requests submitted to SF's 311 system. Refreshed from live data.
+                    </p>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">District</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentRequestsTable" class="bg-white divide-y divide-gray-200">
+                                <tr><td colspan="5" class="px-4 py-3 text-center text-gray-500">Loading recent requests...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prediction Controls (Coming Soon) -->
+            <div class="bg-yellow-50 border-l-4 border-yellow-500 rounded-lg shadow p-6 mb-6">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-yellow-500 text-2xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">
+                            ⚠️ Predictions Coming Soon
+                        </h3>
+                        <p class="text-gray-700 mb-3">
+                            Machine learning models are not yet trained. To enable predictions, we need:
+                        </p>
+                        <ol class="list-decimal list-inside space-y-1 text-gray-700 mb-3">
+                            <li>Collect more historical data (need 6+ months)</li>
+                            <li>Train Prophet and XGBoost forecasting models</li>
+                            <li>Deploy updated models to production</li>
+                        </ol>
+                        <p class="text-gray-600 text-sm">
+                            <strong>For now:</strong> Explore the historical data above to understand request patterns and trends.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -189,8 +339,16 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await checkHealth();
             await loadCategories();
-            await loadHotspots();
             await loadMetrics();
+
+            // Load historical data visualizations
+            await loadHistoricalTrends();
+            await loadCategoryBreakdown();
+            await loadRecentRequests();
+            await loadGeographicData();
+
+            // Load prediction features (will show as unavailable if models not loaded)
+            await loadHotspots();
         });
 
         async function checkHealth() {
@@ -350,35 +508,169 @@
             }
         }
 
+        // NEW: Historical Data Functions
+        async function loadHistoricalTrends() {
+            try {
+                const response = await fetch(`${API_URL}/api/data/stats`);
+                const data = await response.json();
+
+                // Get recent data to build time series
+                const recentResponse = await fetch(`${API_URL}/api/data/recent?limit=1000`);
+                const recentData = await recentResponse.json();
+
+                // Group by date
+                const dateGroups = {};
+                recentData.data.forEach(req => {
+                    if (req.opened) {
+                        const date = req.opened.split('T')[0];
+                        dateGroups[date] = (dateGroups[date] || 0) + 1;
+                    }
+                });
+
+                const dates = Object.keys(dateGroups).sort();
+                const volumes = dates.map(d => dateGroups[d]);
+
+                const trace = {
+                    x: dates,
+                    y: volumes,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Daily Requests',
+                    line: { color: '#3b82f6', width: 2 },
+                    marker: { size: 6 }
+                };
+
+                const layout = {
+                    title: 'Request Volume Over Time',
+                    xaxis: { title: 'Date' },
+                    yaxis: { title: 'Number of Requests' },
+                    hovermode: 'x unified',
+                    showlegend: false,
+                    margin: { t: 40, r: 20, b: 40, l: 60 }
+                };
+
+                Plotly.newPlot('historicalVolumeChart', [trace], layout, { responsive: true });
+            } catch (error) {
+                console.error('Failed to load historical trends:', error);
+                document.getElementById('historicalVolumeChart').innerHTML =
+                    '<p class="text-red-600 p-4">Error loading trend data</p>';
+            }
+        }
+
+        async function loadCategoryBreakdown() {
+            try {
+                const response = await fetch(`${API_URL}/api/data/stats`);
+                const data = await response.json();
+
+                // Get top 10 categories
+                const categories = Object.entries(data.top_categories || data.categories || {})
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+
+                const trace = {
+                    x: categories.map(c => c[1]),
+                    y: categories.map(c => c[0]),
+                    type: 'bar',
+                    orientation: 'h',
+                    marker: { color: '#3b82f6' }
+                };
+
+                const layout = {
+                    title: 'Top 10 Request Categories',
+                    xaxis: { title: 'Number of Requests' },
+                    yaxis: { title: '' },
+                    margin: { t: 40, r: 20, b: 40, l: 150 },
+                    height: 400
+                };
+
+                Plotly.newPlot('categoriesChart', [trace], layout, { responsive: true });
+            } catch (error) {
+                console.error('Failed to load category breakdown:', error);
+                document.getElementById('categoriesChart').innerHTML =
+                    '<p class="text-red-600 p-4">Error loading category data</p>';
+            }
+        }
+
+        async function loadRecentRequests() {
+            try {
+                const response = await fetch(`${API_URL}/api/data/recent?limit=20`);
+                const data = await response.json();
+
+                const tbody = document.getElementById('recentRequestsTable');
+                tbody.innerHTML = data.data.map(req => {
+                    const districtDisplay = req.district !== null && req.district !== undefined ?
+                        Math.floor(req.district) : 'N/A';
+                    return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="px-4 py-2 text-sm">${req.opened ? new Date(req.opened).toLocaleDateString() : 'N/A'}</td>
+                        <td class="px-4 py-2 text-sm">${req.category}</td>
+                        <td class="px-4 py-2 text-sm">${req.address || 'N/A'}</td>
+                        <td class="px-4 py-2 text-sm text-center">${districtDisplay}</td>
+                        <td class="px-4 py-2 text-sm">
+                            <span class="inline-block px-2 py-1 rounded text-xs ${
+                                req.status === 'Closed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }">
+                                ${req.status}
+                            </span>
+                        </td>
+                    </tr>
+                `}).join('');
+            } catch (error) {
+                console.error('Failed to load recent requests:', error);
+                document.getElementById('recentRequestsTable').innerHTML =
+                    '<tr><td colspan="5" class="text-center text-red-600 p-4">Error loading recent requests</td></tr>';
+            }
+        }
+
+        async function loadGeographicData() {
+            try {
+                const response = await fetch(`${API_URL}/api/data/recent?limit=1000`);
+                const data = await response.json();
+
+                // Group by district
+                const districtGroups = {};
+                data.data.forEach(req => {
+                    if (req.district !== null && req.district !== 'N/A' && req.district !== undefined) {
+                        const district = Math.floor(req.district).toString();
+                        districtGroups[district] = (districtGroups[district] || 0) + 1;
+                    }
+                });
+
+                const districts = Object.entries(districtGroups)
+                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+
+                const trace = {
+                    x: districts.map(d => `District ${d[0]}`),
+                    y: districts.map(d => d[1]),
+                    type: 'bar',
+                    marker: { color: '#10b981' }
+                };
+
+                const layout = {
+                    title: 'Requests by Supervisor District',
+                    xaxis: { title: 'District' },
+                    yaxis: { title: 'Number of Requests' },
+                    margin: { t: 40, r: 20, b: 60, l: 60 }
+                };
+
+                Plotly.newPlot('geographicChart', [trace], layout, { responsive: true });
+            } catch (error) {
+                console.error('Failed to load geographic data:', error);
+                document.getElementById('geographicChart').innerHTML =
+                    '<p class="text-red-600 p-4">Error loading geographic data</p>';
+            }
+        }
+
         async function loadMetrics() {
             try {
                 const response = await fetch(`${API_URL}/api/data/stats`);
                 const data = await response.json();
 
-                const table = `
-                    <table class="min-w-full">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sample Count</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">XGBoost MAE</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prophet MAE</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            ${data.categories.map(cat => `
-                                <tr>
-                                    <td class="px-6 py-4 text-sm text-gray-900">${cat.name}</td>
-                                    <td class="px-6 py-4 text-sm text-gray-600">${cat.sample_count.toLocaleString()}</td>
-                                    <td class="px-6 py-4 text-sm text-gray-600">${cat.xgboost_mae.toFixed(2)}</td>
-                                    <td class="px-6 py-4 text-sm text-gray-600">${cat.prophet_mae.toFixed(2)}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-
-                document.getElementById('metricsTable').innerHTML = table;
+                // Update status cards with real data
+                const numCategories = Object.keys(data.categories || {}).length;
+                document.getElementById('categoriesCount').textContent = numCategories.toLocaleString();
+                document.getElementById('totalRequestsCount').textContent = (data.total_requests || 0).toLocaleString();
+                document.getElementById('dailyAvgCount').textContent = Math.round(data.daily_average || 0).toLocaleString();
             } catch (error) {
                 console.error('Failed to load metrics:', error);
             }
