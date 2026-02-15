@@ -7,6 +7,42 @@
 
 ---
 
+## ✅ NEW: CATEGORY-SPECIFIC DEEP INSIGHTS
+
+**Added:** Feb 14, 2026
+**Impact:** Transforms generalized trends into actionable, category-specific resource deployment strategies
+
+### What's New:
+
+1. **Category Growth Trends Chart**
+   - Shows which categories are declining (can reduce resources)
+   - Graffiti Public: -35% (biggest decline)
+   - Street Cleaning: -14.7%
+   - Encampment: -18.3%
+   - **Action:** Reallocate 35% of graffiti crews to growing categories
+
+2. **District Hotspots by Category**
+   - Shows where each issue type concentrates
+   - Graffiti Public: 25.3% in District 9 (Mission/Portola)
+   - Encampment: 33.4% in District 6 (SOMA/Tenderloin)
+   - **Action:** Station specialized crews in these high-concentration districts
+
+3. **Top 5 Actionable Recommendations**
+   - Parking Enforcement peaks at 9:00 → Deploy officers 1 hour before
+   - Graffiti concentrated in D9 → Station cleanup crews there
+   - Street Cleaning 3x higher weekdays → Reduce weekend crews 67%
+   - Sewer issues 2.4x higher rainy days → Pre-position on rain forecasts
+   - Noise complaints 40% after 6pm, peak 11pm → Staff hotline until midnight
+
+### Why This Matters:
+
+**Before:** Generic insights like "8 AM is peak hour" apply to all categories
+**After:** Category-specific insights like "Parking peaks at 9 AM, Graffiti at 3 PM, Noise at 11 PM"
+
+This enables **precise resource deployment** instead of one-size-fits-all staffing.
+
+---
+
 ## 🎯 KEY INSIGHTS FOR RESOURCE PLANNING
 
 ### 1. **Peak Demand Hours** ⏰
