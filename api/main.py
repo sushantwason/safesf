@@ -71,21 +71,22 @@ DATA_CACHE = None
 
 
 def load_data(data_dir: str = "data"):
-    """Load 311 data from GCS or local parquet file on startup"""
+    """Load enriched 311 data (with weather) from GCS or local parquet file on startup"""
     global DATA_CACHE
 
-    # Try to load from Google Cloud Storage via public HTTP URL
-    gcs_http_url = "https://storage.googleapis.com/sf-311-data-personal/311_historical.parquet"
+    # Try to load enriched dataset from Google Cloud Storage via public HTTP URL
+    gcs_http_url = "https://storage.googleapis.com/sf-311-data-personal/311_enriched.parquet"
 
     try:
-        logger.info(f"Attempting to load data from GCS via HTTP: {gcs_http_url}")
+        logger.info(f"Attempting to load enriched data from GCS via HTTP: {gcs_http_url}")
 
         # Download and load with pandas
         DATA_CACHE = pd.read_parquet(gcs_http_url)
 
-        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records from GCS")
+        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records (with weather data) from GCS")
         logger.info(f"Date range: {DATA_CACHE['opened'].min()} to {DATA_CACHE['opened'].max()}")
         logger.info(f"Categories: {DATA_CACHE['category'].nunique()}")
+        logger.info(f"Weather data coverage: {DATA_CACHE['temp_mean_f'].notna().sum()/len(DATA_CACHE)*100:.1f}%")
         return
 
     except Exception as e:
@@ -163,11 +164,19 @@ def load_models(models_dir: str = "models"):
     logger.info(f"Total models loaded: {len(MODELS)}")
 
 
+def ensure_data_loaded():
+    """Lazy load data on first request to speed up startup"""
+    global DATA_CACHE
+    if DATA_CACHE is None:
+        logger.info("⏳ Lazy loading data on first request...")
+        load_data()
+        logger.info("✅ Data loaded successfully")
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup"""
     logger.info("🚀 Starting SF 311 Predictor API...")
-    load_data()
+    logger.info("Data will be loaded on first request (lazy loading for faster startup)")
     load_models()
     logger.info("✅ Application ready!")
 
@@ -454,6 +463,7 @@ async def get_recent_data(limit: int = Query(100, ge=1, le=1000)):
 async def get_data_stats():
     """Get statistics about the underlying data"""
     global DATA_CACHE
+    ensure_data_loaded()
 
     if DATA_CACHE is None or DATA_CACHE.empty:
         # Return stats from metadata if no data loaded
@@ -509,6 +519,114 @@ async def get_daily_timeseries():
         'dates': [str(d) for d in daily_counts['date'].tolist()],
         'counts': daily_counts['count'].tolist(),
         'total_days': len(daily_counts)
+    }
+
+
+@app.get("/api/analytics/day-of-week")
+async def get_day_of_week_analytics():
+    """Get request patterns by day of week"""
+    global DATA_CACHE
+
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+
+    df = DATA_CACHE.copy()
+    df['day_of_week'] = pd.to_datetime(df['opened']).dt.day_name()
+
+    dow_counts = df['day_of_week'].value_counts()
+    dow_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+    return {
+        'days': [d for d in dow_order if d in dow_counts.index],
+        'counts': [int(dow_counts[d]) for d in dow_order if d in dow_counts.index],
+        'percentages': [round(dow_counts[d]/len(df)*100, 1) for d in dow_order if d in dow_counts.index]
+    }
+
+
+@app.get("/api/analytics/hourly-pattern")
+async def get_hourly_pattern():
+    """Get request patterns by hour of day"""
+    global DATA_CACHE
+
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+
+    df = DATA_CACHE.copy()
+    df['hour'] = pd.to_datetime(df['opened']).dt.hour
+
+    hourly_counts = df.groupby('hour').size().sort_index()
+
+    return {
+        'hours': [int(h) for h in hourly_counts.index],
+        'counts': [int(c) for c in hourly_counts.values],
+        'peak_hour': int(hourly_counts.idxmax()),
+        'peak_count': int(hourly_counts.max())
+    }
+
+
+@app.get("/api/analytics/weather-impact")
+async def get_weather_impact():
+    """Analyze weather impact on requests"""
+    global DATA_CACHE
+
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+
+    if 'is_rainy' not in DATA_CACHE.columns:
+        raise HTTPException(status_code=503, detail="Weather data not available")
+
+    df = DATA_CACHE.copy()
+    df['date'] = pd.to_datetime(df['opened']).dt.date
+
+    # Overall impact
+    rainy_avg = df[df['is_rainy'] == True].groupby('date').size().mean()
+    dry_avg = df[df['is_rainy'] == False].groupby('date').size().mean()
+    overall_impact = (rainy_avg / dry_avg - 1) * 100 if dry_avg > 0 else 0
+
+    # Category-specific impact
+    top_cats = df['category'].value_counts().head(10).index
+    category_impacts = []
+
+    for cat in top_cats:
+        cat_data = df[df['category'] == cat]
+        rainy_count = cat_data[cat_data['is_rainy'] == True].groupby('date').size().mean()
+        dry_count = cat_data[cat_data['is_rainy'] == False].groupby('date').size().mean()
+
+        if pd.notna(rainy_count) and pd.notna(dry_count) and dry_count > 0:
+            impact = (rainy_count / dry_count - 1) * 100
+            category_impacts.append({
+                'category': cat,
+                'impact_percent': round(impact, 1)
+            })
+
+    # Sort by absolute impact
+    category_impacts.sort(key=lambda x: abs(x['impact_percent']), reverse=True)
+
+    return {
+        'overall_impact_percent': round(overall_impact, 1),
+        'rainy_day_avg': round(rainy_avg, 0) if pd.notna(rainy_avg) else 0,
+        'dry_day_avg': round(dry_avg, 0) if pd.notna(dry_avg) else 0,
+        'category_impacts': category_impacts[:10]
+    }
+
+
+@app.get("/api/analytics/monthly-trends")
+async def get_monthly_trends():
+    """Get monthly request volume trends"""
+    global DATA_CACHE
+
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+
+    df = DATA_CACHE.copy()
+    df['month'] = pd.to_datetime(df['opened']).dt.to_period('M').astype(str)
+
+    monthly_counts = df.groupby('month').size().sort_index()
+
+    return {
+        'months': [str(m) for m in monthly_counts.index],
+        'counts': [int(c) for c in monthly_counts.values],
+        'average': round(monthly_counts.mean(), 0)
     }
 
 

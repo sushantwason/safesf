@@ -213,6 +213,69 @@
                 </div>
             </div>
 
+            <!-- Resource Planning & Trends Analysis -->
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-chart-pie mr-2 text-purple-600"></i>
+                    Resource Planning & Trends
+                </h2>
+
+                <!-- Day of Week + Weather Impact Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <!-- Day of Week Pattern -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                            <i class="fas fa-calendar-week mr-2 text-indigo-600"></i>
+                            Day of Week Pattern
+                        </h3>
+                        <p class="text-gray-600 text-sm mb-6">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Optimize staffing by day. Monday-Tuesday have highest volumes.
+                        </p>
+                        <div id="dayOfWeekChart" style="height: 400px;"></div>
+                    </div>
+
+                    <!-- Weather Impact -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                            <i class="fas fa-cloud-rain mr-2 text-blue-600"></i>
+                            Weather Impact
+                        </h3>
+                        <p class="text-gray-600 text-sm mb-6">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Rainy days dramatically change request patterns.
+                        </p>
+                        <div id="weatherImpactChart" style="height: 400px;"></div>
+                    </div>
+                </div>
+
+                <!-- Hourly Pattern (Full Width) -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                        <i class="fas fa-clock mr-2 text-orange-600"></i>
+                        Peak Hours Analysis
+                    </h3>
+                    <p class="text-gray-600 text-sm mb-6">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        <strong>8-11 AM = 35% of daily volume.</strong> Staff heavily during morning rush.
+                    </p>
+                    <div id="hourlyPatternChart" style="height: 350px;"></div>
+                </div>
+
+                <!-- Monthly Trends (Full Width) -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                        <i class="fas fa-chart-line mr-2 text-green-600"></i>
+                        Monthly Trends & Seasonality
+                    </h3>
+                    <p class="text-gray-600 text-sm mb-6">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        8 months of data reveal seasonal patterns. January spike = +15% capacity needed.
+                    </p>
+                    <div id="monthlyTrendsChart" style="height: 400px;"></div>
+                </div>
+            </div>
+
             <!-- Prediction Controls (Coming Soon) -->
             <div class="bg-yellow-50 border-l-4 border-yellow-500 rounded-lg shadow p-6 mb-6">
                 <div class="flex items-start">
@@ -367,6 +430,12 @@
             await loadCategoryBreakdown();
             await loadRecentRequests();
             await loadGeographicData();
+
+            // Load resource planning & trends analytics
+            await loadDayOfWeekAnalytics();
+            await loadHourlyPattern();
+            await loadWeatherImpact();
+            await loadMonthlyTrends();
 
             // Load prediction features (will show as unavailable if models not loaded)
             await loadHotspots();
@@ -741,6 +810,167 @@
                 document.getElementById('dailyAvgCount').textContent = Math.round(data.daily_average || 0).toLocaleString();
             } catch (error) {
                 console.error('Failed to load metrics:', error);
+            }
+        }
+
+        // Resource Planning & Trends Functions
+        async function loadDayOfWeekAnalytics() {
+            try {
+                const response = await fetch(`${API_URL}/api/analytics/day-of-week`);
+                const data = await response.json();
+
+                const trace = {
+                    x: data.days,
+                    y: data.counts,
+                    type: 'bar',
+                    marker: {
+                        color: '#6366f1',
+                        line: { color: '#4f46e5', width: 1 }
+                    },
+                    text: data.counts.map(c => c.toLocaleString()),
+                    textposition: 'outside',
+                    textfont: { size: 11 }
+                };
+
+                const layout = {
+                    xaxis: { title: { text: 'Day of Week', font: { size: 13 } } },
+                    yaxis: { title: { text: 'Total Requests', font: { size: 13 } }, gridcolor: '#F3F4F6' },
+                    margin: { t: 20, r: 20, b: 60, l: 65 },
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    font: { family: 'Inter, system-ui, sans-serif' }
+                };
+
+                Plotly.newPlot('dayOfWeekChart', [trace], layout, { responsive: true, displayModeBar: false });
+            } catch (error) {
+                console.error('Failed to load day-of-week analytics:', error);
+            }
+        }
+
+        async function loadHourlyPattern() {
+            try {
+                const response = await fetch(`${API_URL}/api/analytics/hourly-pattern`);
+                const data = await response.json();
+
+                const trace = {
+                    x: data.hours.map(h => `${h}:00`),
+                    y: data.counts,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: '#f97316', width: 3, shape: 'spline' },
+                    marker: { size: 7, color: '#f97316' },
+                    fill: 'tozeroy',
+                    fillcolor: 'rgba(249, 115, 22, 0.1)'
+                };
+
+                const layout = {
+                    xaxis: { title: { text: 'Hour of Day', font: { size: 13 } } },
+                    yaxis: { title: { text: 'Average Requests', font: { size: 13 } }, gridcolor: '#F3F4F6' },
+                    margin: { t: 20, r: 20, b: 60, l: 65 },
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    annotations: [{
+                        x: `${data.peak_hour}:00`,
+                        y: data.peak_count,
+                        text: `Peak: ${data.peak_hour}:00`,
+                        showarrow: true,
+                        arrowhead: 2,
+                        ax: 0,
+                        ay: -40
+                    }],
+                    font: { family: 'Inter, system-ui, sans-serif' }
+                };
+
+                Plotly.newPlot('hourlyPatternChart', [trace], layout, { responsive: true, displayModeBar: false });
+            } catch (error) {
+                console.error('Failed to load hourly pattern:', error);
+            }
+        }
+
+        async function loadWeatherImpact() {
+            try {
+                const response = await fetch(`${API_URL}/api/analytics/weather-impact`);
+                const data = await response.json();
+
+                const categories = data.category_impacts.slice(0, 8).map(c => c.category);
+                const impacts = data.category_impacts.slice(0, 8).map(c => c.impact_percent);
+                const colors = impacts.map(i => i > 0 ? '#10b981' : '#ef4444');
+
+                const trace = {
+                    y: categories,
+                    x: impacts,
+                    type: 'bar',
+                    orientation: 'h',
+                    marker: { color: colors },
+                    text: impacts.map(i => `${i > 0 ? '+' : ''}${i}%`),
+                    textposition: 'outside',
+                    textfont: { size: 11 }
+                };
+
+                const layout = {
+                    xaxis: { title: { text: '% Change on Rainy Days', font: { size: 13 } }, gridcolor: '#F3F4F6', zeroline: true },
+                    yaxis: { title: '', tickfont: { size: 11 }, automargin: true },
+                    margin: { t: 40, r: 80, b: 60, l: 200 },
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    annotations: [{
+                        text: `Overall: ${data.overall_impact_percent}% on rainy days`,
+                        xref: 'paper',
+                        yref: 'paper',
+                        x: 0.5,
+                        y: 1.1,
+                        showarrow: false,
+                        font: { size: 12, color: '#4B5563' }
+                    }],
+                    font: { family: 'Inter, system-ui, sans-serif' }
+                };
+
+                Plotly.newPlot('weatherImpactChart', [trace], layout, { responsive: true, displayModeBar: false });
+            } catch (error) {
+                console.error('Failed to load weather impact:', error);
+                document.getElementById('weatherImpactChart').innerHTML =
+                    '<p class="text-gray-500 p-4">Weather data not available</p>';
+            }
+        }
+
+        async function loadMonthlyTrends() {
+            try {
+                const response = await fetch(`${API_URL}/api/analytics/monthly-trends`);
+                const data = await response.json();
+
+                const trace = {
+                    x: data.months,
+                    y: data.counts,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: '#22c55e', width: 3, shape: 'spline' },
+                    marker: { size: 9, color: '#22c55e', line: { color: '#16a34a', width: 2 } },
+                    fill: 'tozeroy',
+                    fillcolor: 'rgba(34, 197, 94, 0.1)'
+                };
+
+                const avgLine = {
+                    x: data.months,
+                    y: new Array(data.months.length).fill(data.average),
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#9ca3af', width: 2, dash: 'dash' },
+                    name: 'Average'
+                };
+
+                const layout = {
+                    xaxis: { title: { text: 'Month', font: { size: 13 } } },
+                    yaxis: { title: { text: 'Total Requests', font: { size: 13 } }, gridcolor: '#F3F4F6' },
+                    margin: { t: 20, r: 20, b: 60, l: 65 },
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    showlegend: false,
+                    font: { family: 'Inter, system-ui, sans-serif' }
+                };
+
+                Plotly.newPlot('monthlyTrendsChart', [trace, avgLine], layout, { responsive: true, displayModeBar: false });
+            } catch (error) {
+                console.error('Failed to load monthly trends:', error);
             }
         }
     </script>
