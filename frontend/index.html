@@ -681,16 +681,17 @@
                 });
 
                 const districts = Object.entries(districtGroups)
-                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+                    .sort((a, b) => parseInt(b[1]) - parseInt(a[1])); // Sort by count descending
 
                 const trace = {
-                    x: districts.map(d => {
+                    y: districts.map(d => {
                         const districtNum = d[0];
                         const name = DISTRICT_NAMES[districtNum] || `District ${districtNum}`;
-                        return `D${districtNum}<br>${name}`;
+                        return `D${districtNum}: ${name}`;
                     }),
-                    y: districts.map(d => d[1]),
+                    x: districts.map(d => d[1]),
                     type: 'bar',
+                    orientation: 'h',
                     marker: {
                         color: '#8b5cf6',
                         line: { color: '#7c3aed', width: 1 }
@@ -703,21 +704,17 @@
                 const layout = {
                     xaxis: {
                         title: {
-                            text: 'Supervisor District',
-                            font: { size: 13, color: '#4B5563' }
-                        },
-                        tickangle: 0,
-                        tickfont: { size: 11 },
-                        automargin: true
-                    },
-                    yaxis: {
-                        title: {
                             text: 'Number of Requests',
                             font: { size: 13, color: '#4B5563' }
                         },
                         gridcolor: '#F3F4F6'
                     },
-                    margin: { t: 20, r: 20, b: 100, l: 60 },
+                    yaxis: {
+                        title: '',
+                        tickfont: { size: 12 },
+                        automargin: true
+                    },
+                    margin: { t: 20, r: 60, b: 60, l: 200 },
                     height: 500,
                     paper_bgcolor: '#FFFFFF',
                     plot_bgcolor: '#FAFAFA',
