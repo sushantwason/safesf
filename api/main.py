@@ -79,7 +79,10 @@ def load_aggregates():
     global AGGREGATES_CACHE
 
     gcs_base = "https://storage.googleapis.com/sf-311-data-personal/aggregates"
-    agg_files = ["daily_agg", "monthly_agg", "grid_agg", "hourly_agg", "resolution_agg", "recent_raw", "events_agg", "events_by_date"]
+    agg_files = [
+        "daily_agg", "monthly_agg", "grid_agg", "hourly_agg", "resolution_agg", "recent_raw",
+        "events_agg", "events_by_date", "crime_agg", "weather_agg",
+    ]
 
     # Try GCS first
     for name in agg_files:
@@ -672,16 +675,25 @@ async def get_data_stats():
 
 
 @app.get("/api/data/export")
-async def export_data():
-    """Export the full dataset as a CSV download."""
+async def export_data(
+    start_date: Optional[str] = Query(None, description="Filter start date YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="Filter end date YYYY-MM-DD"),
+):
+    """Export dataset as CSV (optionally filtered by date range)."""
     ensure_data_loaded()
 
     if DATA_CACHE is None or DATA_CACHE.empty:
         raise HTTPException(status_code=503, detail="No data available")
 
+    df = DATA_CACHE.copy()
+    if start_date or end_date:
+        df = _filter_date_range(df, start_date, end_date)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="No rows in selected date range")
+
     def _iter_csv():
         buf = io.StringIO()
-        DATA_CACHE.to_csv(buf, index=False)
+        df.to_csv(buf, index=False)
         buf.seek(0)
         yield from buf
 
@@ -709,6 +721,9 @@ async def get_daily_timeseries(
             events_map = _get_events_by_date_dict()
             if events_map and 'dates' in cached:
                 cached['events_by_date'] = {d: events_map.get(d, []) for d in cached.get('dates', [])}
+            weather_map = _get_weather_by_date_dict()
+            if weather_map and 'dates' in cached:
+                cached['weather_by_date'] = {d: weather_map.get(d) for d in cached.get('dates', []) if weather_map.get(d)}
             return cached
 
     days = _days_in_range(start_date, end_date)
@@ -724,11 +739,13 @@ async def get_daily_timeseries(
                 daily_counts = daily_counts.sort_values('date')
                 dates_list = [str(d) for d in daily_counts['date'].tolist()]
                 events_map = _get_events_by_date_dict()
+                weather_map = _get_weather_by_date_dict()
                 return {
                     'dates': dates_list,
                     'counts': daily_counts['count'].astype(int).tolist(),
                     'total_days': len(daily_counts),
                     'events_by_date': {d: events_map.get(d, []) for d in dates_list},
+                    'weather_by_date': {d: weather_map.get(d) for d in dates_list if weather_map.get(d)},
                 }
 
     ensure_data_loaded()
@@ -745,12 +762,15 @@ async def get_daily_timeseries(
     dates_list = [str(d) for d in daily_counts['date'].tolist()]
     events_map = _get_events_by_date_dict()
     events_for_dates = {d: events_map.get(d, []) for d in dates_list}
+    weather_map = _get_weather_by_date_dict()
+    weather_for_dates = {d: weather_map.get(d) for d in dates_list if weather_map.get(d)}
 
     return {
         'dates': dates_list,
         'counts': daily_counts['count'].tolist(),
         'total_days': len(daily_counts),
         'events_by_date': events_for_dates,
+        'weather_by_date': weather_for_dates,
     }
 
 
@@ -1027,14 +1047,16 @@ async def get_event_correlation(
         categories=("category", lambda x: x.value_counts().to_dict()),
     ).reset_index()
 
-    # Merge with events
+    # Merge with events (include construction_count if present)
     events_df["date"] = pd.to_datetime(events_df["date"], errors="coerce").dt.date
-    events_df["has_events"] = (events_df["event_count"].fillna(0) + events_df["street_closure_count"].fillna(0)) > 0
-    merged = daily_311.merge(
-        events_df[["date", "event_count", "street_closure_count", "has_events"]],
-        on="date",
-        how="left",
-    )
+    ec = events_df["event_count"].fillna(0)
+    sc = events_df["street_closure_count"].fillna(0)
+    cc = events_df["construction_count"].fillna(0) if "construction_count" in events_df.columns else 0
+    events_df["has_events"] = (ec + sc + cc) > 0
+    merge_cols = ["date", "event_count", "street_closure_count", "has_events"]
+    if "construction_count" in events_df.columns:
+        merge_cols.append("construction_count")
+    merged = daily_311.merge(events_df[merge_cols], on="date", how="left")
     merged["has_events"] = merged["has_events"].fillna(False)
 
     event_days = merged[merged["has_events"]]
@@ -1061,6 +1083,109 @@ async def get_event_correlation(
         "non_event_days_count": int(len(non_event_days)),
         "top_categories_on_event_days": [{"category": c, "count": int(n)} for c, n in top_on_events],
     }
+
+
+@app.get("/api/analytics/correlation")
+async def get_correlation(
+    dataset: str = Query("events", description="Secondary dataset: events, crime"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+):
+    """
+    Correlate 311 volume with another dataset (events or crime).
+    For crime: returns daily 311 vs daily incident count (citywide or by district).
+    """
+    ensure_data_loaded()
+    ensure_aggregates_loaded()
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+
+    df = DATA_CACHE.copy()
+    df = _filter_date_range(df, start_date, end_date)
+    df["date"] = pd.to_datetime(df["opened"]).dt.date
+    daily_311 = df.groupby("date").size().reset_index(name="total_requests")
+
+    if dataset == "crime" and AGGREGATES_CACHE and "crime_agg" in AGGREGATES_CACHE:
+        crime_df = AGGREGATES_CACHE["crime_agg"].copy()
+        crime_df["date"] = pd.to_datetime(crime_df["date"], errors="coerce").dt.date
+        if "district" in crime_df.columns and crime_df["district"].notna().any():
+            crime_daily = crime_df.groupby("date")["count"].sum().reset_index(name="incident_count")
+        else:
+            crime_daily = crime_df.groupby("date")["count"].sum().reset_index(name="incident_count")
+        merged = daily_311.merge(crime_daily, on="date", how="inner")
+        if merged.empty or len(merged) < 2:
+            return {"message": "Insufficient crime/311 overlap", "correlation": None, "dataset": "crime"}
+        corr = float(merged["total_requests"].corr(merged["incident_count"]))
+        return {
+            "dataset": "crime",
+            "correlation": round(corr, 4),
+            "days_matched": int(len(merged)),
+            "avg_311": round(float(merged["total_requests"].mean()), 1),
+            "avg_incidents": round(float(merged["incident_count"].mean()), 1),
+        }
+    if dataset == "events":
+        return await get_event_correlation(start_date=start_date, end_date=end_date)
+    raise HTTPException(status_code=400, detail="dataset must be 'events' or 'crime'")
+
+
+def _get_weather_by_date_dict():
+    """Return {date_str: {precip_mm, temp_max_c, rain_day}} from weather_agg (JSON-serializable)."""
+    def _sanitize(row):
+        out = {}
+        for k, v in row.items():
+            if pd.isna(v):
+                out[k] = None
+            elif isinstance(v, (np.integer, np.floating)):
+                out[k] = float(v)
+            else:
+                out[k] = v
+        return out
+
+    ensure_aggregates_loaded()
+    if not AGGREGATES_CACHE or "weather_agg" not in AGGREGATES_CACHE:
+        for base in [Path("/app") / "data" / "aggregates", Path(__file__).parent.parent / "data" / "aggregates"]:
+            p = base / "weather_agg.parquet"
+            if p.exists():
+                try:
+                    df = pd.read_parquet(p)
+                    df["date"] = pd.to_datetime(df["date"]).dt.date
+                    return {str(d): _sanitize(row) for d, row in df.set_index("date").to_dict("index").items()}
+                except Exception:
+                    pass
+        return {}
+    df = AGGREGATES_CACHE["weather_agg"].copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    return {str(d): _sanitize(row) for d, row in df.set_index("date").to_dict("index").items()}
+
+
+@app.get("/api/data/weather")
+async def get_weather(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+):
+    """Return daily weather for SF (precip, temp) for chart annotations."""
+    weather = _get_weather_by_date_dict()
+    if not weather:
+        return {"weather_by_date": {}, "message": "Run scripts/fetch_weather.py --days 365"}
+    dates = sorted(weather.keys())
+    if start_date:
+        dates = [d for d in dates if d >= start_date]
+    if end_date:
+        dates = [d for d in dates if d <= end_date]
+    return {"weather_by_date": {d: weather[d] for d in dates}}
+
+
+@app.get("/api/data/freshness")
+async def get_freshness():
+    """Return last-updated dates for 311, events, crime, weather (for dashboard badge)."""
+    ensure_aggregates_loaded()
+    out = {"311": None, "events": None, "crime": None, "weather": None}
+    for name, key in [("311", "daily_agg"), ("events", "events_agg"), ("crime", "crime_agg"), ("weather", "weather_agg")]:
+        if AGGREGATES_CACHE and key in AGGREGATES_CACHE:
+            df = AGGREGATES_CACHE[key]
+            if "date" in df.columns and not df.empty:
+                out[name] = str(pd.to_datetime(df["date"]).max().date()) if pd.notna(df["date"].max()) else None
+    return out
 
 
 # ---------------------------------------------------------------------------

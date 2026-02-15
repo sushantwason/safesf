@@ -4,6 +4,7 @@ Fetch event data from DataSF for 311 request correlation.
 Datasets:
 - Our415 Events and Activities (8i3s-ih2a)
 - Temporary Street Closures (8x25-yybr)
+- Building Permits (i98e-djp9) via fetch_permits.py — merged if data/events/permits.parquet exists
 
 Run periodically to keep event data current. Used by build_aggregates for correlation.
 """
@@ -108,39 +109,62 @@ def fetch_street_closures(client, start_date: str, end_date: str, limit: int = 5
     return df
 
 
-def build_events_agg(our415: pd.DataFrame, closures: pd.DataFrame) -> pd.DataFrame:
+def load_permits_if_present(events_dir: Path) -> pd.DataFrame:
+    """Load permits.parquet if produced by fetch_permits.py."""
+    p = events_dir / "permits.parquet"
+    if not p.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_parquet(p)
+    except Exception as e:
+        logging.getLogger(__name__).warning("Could not load permits: %s", e)
+        return pd.DataFrame()
+
+
+def build_events_agg(our415: pd.DataFrame, closures: pd.DataFrame, permits: pd.DataFrame = None) -> pd.DataFrame:
     """
     Build daily event counts for correlation with 311.
-    Output: date, event_count, street_closure_count
+    Output: date, event_count, street_closure_count, construction_count
     """
     rows = []
     all_dates = set()
+    permits = permits if permits is not None else pd.DataFrame()
 
     if not our415.empty and "event_date" in our415.columns:
         our415 = our415.dropna(subset=["event_date"])
         for d, cnt in our415["event_date"].value_counts().items():
             all_dates.add(d)
-            rows.append({"date": d, "event_count": int(cnt), "street_closure_count": 0})
+            rows.append({"date": d, "event_count": int(cnt), "street_closure_count": 0, "construction_count": 0})
     if not closures.empty and "closure_date" in closures.columns:
         closures = closures.dropna(subset=["closure_date"])
         for d, cnt in closures["closure_date"].value_counts().items():
             all_dates.add(d)
-            rows.append({"date": d, "event_count": 0, "street_closure_count": int(cnt)})
+            rows.append({"date": d, "event_count": 0, "street_closure_count": int(cnt), "construction_count": 0})
+    if not permits.empty and "date" in permits.columns:
+        permits = permits.dropna(subset=["date"])
+        for d, cnt in permits["date"].value_counts().items():
+            all_dates.add(d)
+            rows.append({"date": d, "event_count": 0, "street_closure_count": 0, "construction_count": int(cnt)})
 
     if not rows:
-        return pd.DataFrame(columns=["date", "event_count", "street_closure_count"])
+        return pd.DataFrame(columns=["date", "event_count", "street_closure_count", "construction_count"])
 
     agg = pd.DataFrame(rows)
-    agg = agg.groupby("date").agg({"event_count": "sum", "street_closure_count": "sum"}).reset_index()
+    agg = agg.groupby("date").agg({
+        "event_count": "sum",
+        "street_closure_count": "sum",
+        "construction_count": "sum",
+    }).reset_index()
     return agg
 
 
-def build_events_by_date(our415: pd.DataFrame, closures: pd.DataFrame) -> pd.DataFrame:
+def build_events_by_date(our415: pd.DataFrame, closures: pd.DataFrame, permits: pd.DataFrame = None) -> pd.DataFrame:
     """
     Build day-by-day event names for annotations (e.g. "Noise spike maybe due to: Super Bowl").
-    Output: date, event_names (JSON list of strings)
+    Output: date, event_names (pipe-separated)
     """
     date_events = {}
+    permits = permits if permits is not None else pd.DataFrame()
 
     if not our415.empty and "event_date" in our415.columns:
         name_col = "event_name" if "event_name" in our415.columns else "event_description"
@@ -167,6 +191,14 @@ def build_events_by_date(our415: pd.DataFrame, closures: pd.DataFrame) -> pd.Dat
             if name and len(name) < 100:
                 date_events.setdefault(d, []).append(("closure", name))
 
+    if not permits.empty and "date" in permits.columns and "name" in permits.columns:
+        permits = permits.dropna(subset=["date"])
+        for _, row in permits.iterrows():
+            d = row["date"]
+            name = ("Construction: " + str(row["name"]).strip())[:80]
+            if name and name != "Construction: nan":
+                date_events.setdefault(d, []).append(("construction", name))
+
     # Dedupe and limit per date
     rows = []
     for d, items in sorted(date_events.items()):
@@ -177,11 +209,21 @@ def build_events_by_date(our415: pd.DataFrame, closures: pd.DataFrame) -> pd.Dat
             if n_clean not in seen:
                 seen.add(n_clean)
                 names.append(n_clean)
-                if len(names) >= 5:
+                if len(names) >= 8:
                     break
         rows.append({"date": d, "event_names": "|".join(names)})
 
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["date", "event_names"])
+
+
+def validate_after_fetch(df: pd.DataFrame, name: str) -> bool:
+    """Light validation: non-empty and key columns."""
+    if df is None or df.empty:
+        return True
+    if "date" in df.columns or "event_date" in df.columns or "closure_date" in df.columns:
+        return True
+    logger.warning("Validation: %s missing date column", name)
+    return False
 
 
 def main():
@@ -190,6 +232,7 @@ def main():
     parser.add_argument("--end-date", type=str, default=None, help="End date YYYY-MM-DD")
     parser.add_argument("--output-dir", type=str, default="data/events", help="Output directory")
     parser.add_argument("--days", type=int, default=365, help="Days of history if dates not set")
+    parser.add_argument("--incremental", action="store_true", help="Only fetch last --days (e.g. 7) for incremental sync")
     args = parser.parse_args()
 
     end = datetime.now().date()
@@ -198,18 +241,21 @@ def main():
     start = end - timedelta(days=args.days)
     if args.start_date:
         start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+    if args.incremental:
+        start = end - timedelta(days=min(args.days, 31))
+        logger.info("Incremental sync: %s to %s", start, end)
 
     start_str = start.strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
-    logger.info(f"Fetching events from {start_str} to {end_str}")
+    logger.info("Fetching events from %s to %s", start_str, end_str)
 
     client = get_client()
 
     our415 = fetch_our415_events(client, start_str, end_str)
     closures = fetch_street_closures(client, start_str, end_str)
-
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    permits = load_permits_if_present(out_dir)
 
     if not our415.empty:
         our415.to_parquet(out_dir / "our415_events.parquet", index=False, compression="gzip")
@@ -219,17 +265,17 @@ def main():
     agg_path = Path("data/aggregates")
     agg_path.mkdir(parents=True, exist_ok=True)
 
-    agg = build_events_agg(our415, closures)
+    agg = build_events_agg(our415, closures, permits)
     if not agg.empty:
         agg.to_parquet(out_dir / "events_daily_agg.parquet", index=False, compression="gzip")
         agg.to_parquet(agg_path / "events_agg.parquet", index=False, compression="gzip")
-        logger.info(f"Saved events_agg: {len(agg)} days")
+        logger.info("Saved events_agg: %d days", len(agg))
 
-    events_by_date = build_events_by_date(our415, closures)
+    events_by_date = build_events_by_date(our415, closures, permits)
     if not events_by_date.empty:
         events_by_date.to_parquet(out_dir / "events_by_date.parquet", index=False, compression="gzip")
         events_by_date.to_parquet(agg_path / "events_by_date.parquet", index=False, compression="gzip")
-        logger.info(f"Saved events_by_date: {len(events_by_date)} days with event names")
+        logger.info("Saved events_by_date: %d days with event names", len(events_by_date))
 
     logger.info("Done!")
     return 0

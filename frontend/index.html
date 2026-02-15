@@ -36,6 +36,7 @@
                 <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="trends">Trends</button>
                 <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="map">Map</button>
                 <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="insights">Insights</button>
+                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="compare">Compare</button>
             </div>
             <div class="flex items-center gap-2">
                 <input type="date" id="startDate" class="text-xs border border-gray-300 rounded px-2 py-1">
@@ -235,10 +236,29 @@
         </div>
     </main>
 
+    <!-- Tab: Compare (311 vs events / crime) -->
+        <div data-tab-content="compare" class="hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-2">Compare 311 with another dataset</h3>
+                <p class="text-xs text-gray-500 mb-4">See how 311 request volume correlates with events (Our415, street closures, construction) or SFPD incident reports.</p>
+                <div class="flex items-center gap-4 mb-4">
+                    <label class="text-xs font-medium text-gray-600">Secondary dataset:</label>
+                    <select id="compareDataset" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
+                        <option value="events">Events (Our415, closures, permits)</option>
+                        <option value="crime">SFPD incidents (crime)</option>
+                    </select>
+                    <button id="runCompare" class="text-xs bg-blue-600 text-white px-3 py-1 rounded font-medium hover:bg-blue-700 transition">Update</button>
+                </div>
+                <div id="compareResult" class="text-sm text-gray-700 min-h-[120px]">
+                    <p class="text-gray-400">Click Update to load correlation.</p>
+                </div>
+            </div>
+        </div>
+
     <!-- Footer -->
     <footer class="border-t border-gray-200 bg-white">
         <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <p class="text-xs text-gray-400">SF 311 Data &middot; Updated daily &middot; data.sfgov.org</p>
+            <p class="text-xs text-gray-400" id="dataFreshness">SF 311 Data &middot; data.sfgov.org</p>
             <div class="flex items-center gap-4">
                 <button id="exportCsv" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Export CSV</button>
                 <a href="/docs" class="text-xs text-gray-400 hover:text-gray-600">API Docs</a>
@@ -332,7 +352,7 @@
 
         // Restore from hash
         const hash = window.location.hash.replace('#', '');
-        if (hash && ['overview', 'trends', 'map', 'insights'].includes(hash)) {
+        if (hash && ['overview', 'trends', 'map', 'insights', 'compare'].includes(hash)) {
             btns.forEach(b => {
                 b.classList.toggle('active', b.getAttribute('data-tab') === hash);
             });
@@ -351,6 +371,7 @@
             case 'trends': await loadTrends(); break;
             case 'map': await loadMap(); break;
             case 'insights': await loadInsights(); break;
+            case 'compare': await loadCompare(); break;
         }
     }
 
@@ -475,11 +496,15 @@
 
     function renderVolumeChart(ts) {
         const eventsByDate = ts.events_by_date || {};
+        const weatherByDate = ts.weather_by_date || {};
         const hoverText = ts.dates.map((d, i) => {
             const cnt = (ts.counts[i] || 0).toLocaleString();
+            let line = d + '<br>' + cnt + ' requests';
             const ev = eventsByDate[d];
-            if (ev && ev.length) return d + '<br>' + cnt + ' requests<br><b>Events:</b> ' + ev.join(', ');
-            return d + '<br>' + cnt + ' requests';
+            if (ev && ev.length) line += '<br><b>Events:</b> ' + ev.join(', ');
+            const w = weatherByDate[d];
+            if (w && (w.precip_mm > 0 || w.rain_day)) line += '<br><b>Rain:</b> ' + (w.precip_mm != null ? w.precip_mm.toFixed(1) + ' mm' : 'yes');
+            return line;
         });
         const trace = {
             x: ts.dates,
@@ -490,12 +515,27 @@
             mode: 'lines+markers',
             line: { color: '#2563eb', width: 2 },
             marker: { size: 3, color: '#2563eb' },
+            name: '311 requests',
         };
+        const shapes = [];
+        ts.dates.forEach((d, i) => {
+            const w = weatherByDate[d];
+            if (w && (w.rain_day === 1 || (w.precip_mm != null && w.precip_mm > 0.1))) {
+                const x0 = i - 0.5;
+                const x1 = i + 0.5;
+                shapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0, x1, y0: 0, y1: 1, fillcolor: 'rgba(59, 130, 246, 0.08)', line: { width: 0 } });
+            }
+        });
         const layout = buildLayout({
             margin: { t: 10, r: 20, b: 40, l: 50 },
             xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
             yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Requests', font: { size: 11 } } },
             hovermode: 'closest',
+            shapes,
+            annotations: shapes.length ? [{
+                xref: 'paper', yref: 'paper', x: 1, y: 1.02, xanchor: 'right', yanchor: 'bottom',
+                text: 'Light blue = rain days', showarrow: false, font: { size: 10, color: '#6b7280' },
+            }] : [],
         });
         Plotly.newPlot('volumeChart', [trace], layout, CHART_CONFIG);
     }
@@ -891,6 +931,38 @@
         setTimeout(() => leafletMap.invalidateSize(), 100);
     }
 
+    // ---- Compare Tab ----
+
+    async function loadCompare() {
+        const params = getDateParams();
+        const dataset = document.getElementById('compareDataset').value;
+        const el = document.getElementById('compareResult');
+        el.innerHTML = '<p class="text-gray-400">Loading...</p>';
+        try {
+            const data = await apiFetch('/api/analytics/correlation?dataset=' + dataset + (params ? params.replace('?', '&') : ''));
+            if (data.dataset === 'crime' && data.correlation != null) {
+                el.innerHTML =
+                    '<p><span class="font-medium">Correlation (311 vs SFPD incidents):</span> ' + data.correlation.toFixed(3) + '</p>' +
+                    '<p class="mt-2">Matched days: ' + (data.days_matched || 0) + '</p>' +
+                    '<p>Avg 311 requests/day: ' + (data.avg_311 != null ? data.avg_311.toLocaleString() : '—') + '</p>' +
+                    '<p>Avg incidents/day: ' + (data.avg_incidents != null ? data.avg_incidents.toLocaleString() : '—') + '</p>';
+            } else if (data.event_days_avg_requests != null) {
+                const lift = data.lift_percent != null ? data.lift_percent : 0;
+                const liftColor = lift > 0 ? 'text-red-600' : lift < 0 ? 'text-green-600' : 'text-gray-600';
+                const topCats = (data.top_categories_on_event_days || []).slice(0, 5).map(c => c.category + ' (' + c.count + ')').join(', ') || '—';
+                el.innerHTML =
+                    '<p><span class="font-medium">Avg requests on event days:</span> ' + data.event_days_avg_requests.toLocaleString() + ' (' + (data.event_days_count || 0) + ' days)</p>' +
+                    '<p><span class="font-medium">Avg requests on non-event days:</span> ' + data.non_event_days_avg_requests.toLocaleString() + ' (' + (data.non_event_days_count || 0) + ' days)</p>' +
+                    '<p class="' + liftColor + ' font-medium">' + (lift > 0 ? '↑' : '') + (lift < 0 ? '↓' : '') + (lift !== 0 ? Math.abs(lift) + '%' : '0%') + ' on event days vs non-event days</p>' +
+                    '<p class="text-xs text-gray-500 mt-2"><span class="font-medium">Top categories on event days:</span> ' + topCats + '</p>';
+            } else {
+                el.innerHTML = '<p class="text-gray-500">' + (data.message || 'No data for this dataset. Run the fetch scripts.') + '</p>';
+            }
+        } catch (e) {
+            el.innerHTML = '<p class="text-red-600">Failed to load: ' + (e.message || 'Unknown error') + '</p>';
+        }
+    }
+
     // ---- Insights Tab ----
 
     async function loadInsights() {
@@ -1076,8 +1148,24 @@
         });
 
         document.getElementById('exportCsv').addEventListener('click', () => {
-            window.location.href = API_URL + '/api/data/export';
+            const params = getDateParams();
+            window.location.href = API_URL + '/api/data/export' + params;
         });
+
+        document.getElementById('runCompare').addEventListener('click', () => loadCompare());
+
+        // Data freshness in footer
+        apiFetch('/api/data/freshness').then(f => {
+            if (f && (f['311'] || f.events || f.crime || f.weather)) {
+                const parts = [];
+                if (f['311']) parts.push('311 through ' + f['311']);
+                if (f.events) parts.push('Events through ' + f.events);
+                if (f.crime) parts.push('Crime through ' + f.crime);
+                if (f.weather) parts.push('Weather through ' + f.weather);
+                const el = document.getElementById('dataFreshness');
+                if (el && parts.length) el.textContent = parts.join(' · ') + ' · data.sfgov.org';
+            }
+        }).catch(() => {});
     }
 
     // ---- Init ----

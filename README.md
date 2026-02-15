@@ -80,6 +80,13 @@ python scripts/build_aggregates.py --gcs-url "https://storage.googleapis.com/sf-
 # Fetch DataSF event data (Our415 + Street Closures) for 311 correlation
 python scripts/fetch_events.py --days 365
 
+# Optional: weather (Open-Meteo), crime (SFPD), building permits (merged into events)
+python scripts/fetch_weather.py --days 365
+python scripts/fetch_crime.py --days 365
+python scripts/fetch_permits.py --days 365
+# Re-run fetch_events to merge permits into events_agg/events_by_date
+python scripts/fetch_events.py --days 365
+
 # Load into BigQuery
 python scripts/load_to_bigquery.py
 
