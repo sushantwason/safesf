@@ -51,7 +51,7 @@ Machine learning system to predict San Francisco 311 service request volumes and
 
 ```bash
 # Clone and setup
-cd sf-311-predictor
+git clone <repo-url> safesf && cd safesf
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
@@ -60,9 +60,9 @@ pip install -r requirements.txt
 gcloud config set project safesf-439219
 gcloud auth application-default login
 
-# Set environment variables
+# Optional: for local dev, copy env template and edit
 cp .env.example .env
-# Edit .env with your configuration
+# Edit .env if you need ALLOWED_ORIGINS or other overrides (deploy uses .env.example in the image)
 ```
 
 ### Data Setup
@@ -106,40 +106,36 @@ cd frontend
 python -m http.server 3000
 ```
 
-### Deploy with crime/weather data (Compare tab & rain annotations)
+### Deployment
 
-The app reads `data/aggregates/crime_agg.parquet` and `weather_agg.parquet` if present. To include them in the deployed image:
+Deploy to Cloud Run using the project script (recommended). It sets the GCP project, enables required APIs, builds the container with Cloud Build, deploys the service with `GCP_PROJECT_ID` and `GCP_REGION` set, and optionally creates the daily sync scheduler job (6am PT).
+
+**Before first deploy:** ensure `data/aggregates/` has at least the 311 and events data (e.g. run Data Setup above: `fetch_data` → `build_aggregates` → `fetch_events`). The Docker build copies `data/aggregates/` into the image.
 
 ```bash
-# Fetch crime + weather into data/aggregates/
-./scripts/prepare_data_for_deploy.sh
-
-# Then deploy (build copies data/aggregates/ into the image)
+# From repo root
 ./scripts/deploy.sh
 ```
 
-Or manually: `python scripts/fetch_crime.py --days 365`, then `python scripts/fetch_weather.py --days 365`, then deploy.
+If deploy fails with permission errors (e.g. Cloud Build or Cloud Run), a project Owner or IAM admin can grant the needed roles once:
+
+```bash
+./scripts/fix-deploy-permissions.sh
+```
+
+Then run `./scripts/deploy.sh` again.
+
+**Optional — Include crime & weather (Compare tab & rain annotations):**  
+The app uses `data/aggregates/crime_agg.parquet` and `weather_agg.parquet` when present. To bundle them in the image:
+
+```bash
+./scripts/prepare_data_for_deploy.sh   # fetches crime + weather into data/aggregates/
+./scripts/deploy.sh
+```
 
 ### Custom domain (safesf.app)
 
 To serve the app at **https://safesf.app** instead of the default `*.run.app` URL, see **[docs/CUSTOM_DOMAIN.md](docs/CUSTOM_DOMAIN.md)** for buying the domain, mapping it in Cloud Run, and setting DNS.
-
-### Deployment
-
-```bash
-# Deploy to Cloud Run
-gcloud run deploy sf-311-predictor \
-  --source . \
-  --project safesf-439219 \
-  --region us-west1 \
-  --allow-unauthenticated
-
-# Set up daily data sync
-gcloud scheduler jobs create http sf-311-daily-sync \
-  --schedule="0 6 * * *" \
-  --uri="https://YOUR_SERVICE_URL/api/sync" \
-  --http-method=POST
-```
 
 ## API Endpoints
 
