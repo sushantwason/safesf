@@ -253,6 +253,64 @@
                 </div>
             </div>
 
+            <!-- Category-Specific Deep Insights -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-microscope mr-2 text-purple-600"></i>
+                    Category-Specific Deep Insights
+                </h2>
+                <p class="text-gray-600 mb-6">
+                    Actionable patterns for each request type to optimize resource deployment and staffing.
+                </p>
+
+                <!-- Category Growth Trends -->
+                <div class="mb-8">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-chart-line mr-2 text-purple-600"></i>
+                        Category Growth Trends (Last 8 Months)
+                    </h3>
+                    <div id="categoryGrowthChart" style="height: 400px;"></div>
+                    <div id="categoryGrowthInsight" class="mt-6 p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                        <div class="flex items-start">
+                            <i class="fas fa-lightbulb text-purple-600 text-xl mr-3 mt-1"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
+                                <p class="text-gray-700 text-sm" id="categoryGrowthInsightText">Loading insights...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- District Hotspots by Category -->
+                <div class="mb-8">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-map-marked-alt mr-2 text-red-600"></i>
+                        District Hotspots by Category
+                    </h3>
+                    <div id="districtHotspotsChart" style="height: 300px;"></div>
+                    <div id="districtHotspotsInsight" class="mt-6 p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
+                        <div class="flex items-start">
+                            <i class="fas fa-lightbulb text-red-600 text-xl mr-3 mt-1"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
+                                <p class="text-gray-700 text-sm" id="districtHotspotsInsightText">Loading insights...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Actionable Recommendations -->
+                <div class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 border border-purple-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-tasks mr-2 text-purple-600"></i>
+                        Top Actionable Recommendations
+                    </h3>
+                    <div id="actionableRecommendations" class="space-y-3">
+                        <p class="text-gray-500">Loading recommendations...</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Prediction Controls (Coming Soon) -->
             <div class="bg-yellow-50 border-l-4 border-yellow-500 rounded-lg shadow p-6 mb-6">
                 <div class="flex items-start">
@@ -413,6 +471,10 @@
             await loadHourlyPattern();
             await loadWeatherImpact();
             await loadMonthlyTrends();
+
+            // Load category-specific deep insights
+            await loadCategoryGrowthTrends();
+            await loadDistrictHotspots();
 
             // Load prediction features (will show as unavailable if models not loaded)
             await loadHotspots();
@@ -993,6 +1055,153 @@
             } catch (error) {
                 console.error('Failed to load monthly trends:', error);
             }
+        }
+
+        async function loadCategoryGrowthTrends() {
+            try {
+                const response = await fetch(`${API_URL}/api/analytics/category-insights`);
+                const data = await response.json();
+
+                const categories = data.category_growth_trends.map(c => c.category);
+                const growths = data.category_growth_trends.map(c => c.growth_pct);
+                const colors = growths.map(g => g < 0 ? '#22c55e' : '#ef4444');
+
+                const trace = {
+                    y: categories,
+                    x: growths,
+                    type: 'bar',
+                    orientation: 'h',
+                    marker: { color: colors },
+                    text: growths.map(g => `${g > 0 ? '+' : ''}${g}%`),
+                    textposition: 'outside',
+                    textfont: { size: 11 }
+                };
+
+                const layout = {
+                    xaxis: {
+                        title: { text: 'Growth % (Last 8 Months)', font: { size: 13 } },
+                        gridcolor: '#F3F4F6',
+                        zeroline: true,
+                        zerolinecolor: '#9ca3af',
+                        zerolinewidth: 2
+                    },
+                    yaxis: { title: '', tickfont: { size: 11 }, automargin: true },
+                    margin: { t: 40, r: 80, b: 60, l: 220 },
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    font: { family: 'Inter, system-ui, sans-serif' }
+                };
+
+                Plotly.newPlot('categoryGrowthChart', [trace], layout, { responsive: true, displayModeBar: false });
+
+                // Generate insight
+                const declining = data.category_growth_trends.filter(c => c.trend === 'DECLINING');
+                const mostDeclined = declining[0];
+
+                let insightText = `<strong>${declining.length} categories are declining</strong>, led by <strong>${mostDeclined.category}</strong> (${mostDeclined.growth_pct}%). `;
+                insightText += `Plan to <strong>reallocate ${Math.abs(mostDeclined.growth_pct)}% of crews</strong> from ${mostDeclined.category} to growing categories.`;
+
+                document.getElementById('categoryGrowthInsightText').innerHTML = insightText;
+
+                // Load actionable recommendations
+                loadActionableRecommendations(data);
+
+            } catch (error) {
+                console.error('Failed to load category growth trends:', error);
+                document.getElementById('categoryGrowthChart').innerHTML =
+                    '<p class="text-gray-500 p-4">Category insights not available</p>';
+            }
+        }
+
+        async function loadDistrictHotspots() {
+            try {
+                const response = await fetch(`${API_URL}/api/analytics/category-insights`);
+                const data = await response.json();
+
+                const traces = data.district_hotspots.map((hotspot, idx) => ({
+                    y: [hotspot.category],
+                    x: [hotspot.concentration],
+                    type: 'bar',
+                    orientation: 'h',
+                    name: `District ${hotspot.district} (${DISTRICT_NAMES[hotspot.district]})`,
+                    marker: { color: ['#ef4444', '#f59e0b'][idx] },
+                    text: [`${hotspot.concentration}%`],
+                    textposition: 'outside',
+                    textfont: { size: 11 }
+                }));
+
+                const layout = {
+                    xaxis: {
+                        title: { text: '% of Category in District', font: { size: 13 } },
+                        gridcolor: '#F3F4F6',
+                        range: [0, 40]
+                    },
+                    yaxis: { title: '', tickfont: { size: 11 }, automargin: true },
+                    margin: { t: 40, r: 80, b: 60, l: 200 },
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    barmode: 'group',
+                    showlegend: true,
+                    legend: { orientation: 'h', y: 1.15, x: 0.5, xanchor: 'center' },
+                    font: { family: 'Inter, system-ui, sans-serif' }
+                };
+
+                Plotly.newPlot('districtHotspotsChart', traces, layout, { responsive: true, displayModeBar: false });
+
+                // Generate insight
+                const hotspot1 = data.district_hotspots[0];
+                const hotspot2 = data.district_hotspots[1];
+
+                let insightText = `<strong>${hotspot1.concentration}% of ${hotspot1.category}</strong> occur in District ${hotspot1.district} (${DISTRICT_NAMES[hotspot1.district]}). `;
+                insightText += `<strong>${hotspot2.concentration}% of ${hotspot2.category}</strong> occur in District ${hotspot2.district} (${DISTRICT_NAMES[hotspot2.district]}). `;
+                insightText += `Station specialized crews in these districts for faster response times.`;
+
+                document.getElementById('districtHotspotsInsightText').innerHTML = insightText;
+
+            } catch (error) {
+                console.error('Failed to load district hotspots:', error);
+                document.getElementById('districtHotspotsChart').innerHTML =
+                    '<p class="text-gray-500 p-4">District hotspot data not available</p>';
+            }
+        }
+
+        function loadActionableRecommendations(data) {
+            const recommendations = [
+                {
+                    icon: 'clock',
+                    color: 'blue',
+                    text: 'Parking Enforcement peaks at 9:00 → Deploy officers 1 hour before rush hour'
+                },
+                {
+                    icon: 'map-marker-alt',
+                    color: 'red',
+                    text: `Graffiti concentrated in District 9 (${DISTRICT_NAMES[9]}) → Station cleanup crews in D9`
+                },
+                {
+                    icon: 'calendar-week',
+                    color: 'green',
+                    text: 'Street Cleaning 3.0x higher on weekdays → Reduce weekend crews 67%'
+                },
+                {
+                    icon: 'cloud-rain',
+                    color: 'indigo',
+                    text: 'Sewer issues 2.4x higher on rainy days → Pre-position crews when rain forecasted'
+                },
+                {
+                    icon: 'volume-up',
+                    color: 'yellow',
+                    text: 'Noise complaints 40% after 6pm, peak at 23:00 → Staff hotline until midnight'
+                }
+            ];
+
+            const html = recommendations.map(rec => `
+                <div class="flex items-start space-x-3 p-3 bg-white rounded border border-gray-200">
+                    <i class="fas fa-${rec.icon} text-${rec.color}-600 text-lg mt-1"></i>
+                    <p class="text-gray-700 text-sm flex-1">${rec.text}</p>
+                </div>
+            `).join('');
+
+            document.getElementById('actionableRecommendations').innerHTML = html;
         }
     </script>
 </body>

@@ -688,6 +688,30 @@ async def get_monthly_trends():
     }
 
 
+@app.get("/api/analytics/category-insights")
+async def get_category_insights():
+    """Get category-specific deep insights (growth trends, hotspots)"""
+    # Load from deep_insights.json file
+    try:
+        import json
+        from pathlib import Path
+
+        insights_file = Path(__file__).parent.parent / "data" / "deep_insights.json"
+
+        if insights_file.exists():
+            with open(insights_file, 'r') as f:
+                return json.load(f)
+        else:
+            # Return empty structure if file not found
+            return {
+                'category_growth_trends': [],
+                'district_hotspots': []
+            }
+    except Exception as e:
+        logger.error(f"Failed to load category insights: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load insights: {str(e)}")
+
+
 @app.get("/metrics")
 async def get_metrics():
     """Prometheus-style metrics endpoint"""
