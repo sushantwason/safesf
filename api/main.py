@@ -421,16 +421,26 @@ async def get_recent_data(limit: int = Query(100, ge=1, le=1000)):
 
     records = []
     for _, row in df.iterrows():
+        # Safely convert district to int or None
+        district_val = row.get('supervisor_district')
+        if pd.notna(district_val):
+            try:
+                district_val = int(float(district_val))
+            except (ValueError, TypeError):
+                district_val = None
+        else:
+            district_val = None
+
         records.append({
-            'id': row.get('service_request_id', 'N/A'),
-            'category': row.get('category', 'Unknown'),
-            'status': row.get('status_description', 'Unknown'),
+            'id': str(row.get('service_request_id', 'N/A')),
+            'category': str(row.get('category', 'Unknown')),
+            'status': str(row.get('status_description', 'Unknown')),
             'opened': row['opened'].isoformat() if pd.notna(row.get('opened')) else None,
             'closed': row['closed'].isoformat() if pd.notna(row.get('closed')) else None,
-            'address': row.get('address', 'N/A'),
-            'district': row.get('supervisor_district', 'N/A'),
-            'latitude': float(row['latitude']) if pd.notna(row.get('latitude')) else None,
-            'longitude': float(row['longitude']) if pd.notna(row.get('longitude')) else None,
+            'address': str(row.get('address', 'N/A')),
+            'district': district_val,
+            'latitude': None,  # Disabled to avoid JSON serialization issues with NaN
+            'longitude': None,  # Disabled to avoid JSON serialization issues with NaN
         })
 
     return {
