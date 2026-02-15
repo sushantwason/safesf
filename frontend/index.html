@@ -39,49 +39,6 @@
 
         <!-- Main Content -->
         <main class="container mx-auto px-4 py-8">
-            <!-- Introduction Section -->
-            <div class="bg-blue-50 border-l-4 border-blue-500 rounded-lg shadow p-6 mb-8">
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-info-circle text-blue-500 text-3xl"></i>
-                    </div>
-                    <div class="ml-4 flex-1">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-3">
-                            <i class="fas fa-bullseye mr-2 text-blue-600"></i>
-                            About This Tool
-                        </h2>
-                        <p class="text-gray-700 text-lg mb-4">
-                            This dashboard helps you understand <strong>San Francisco's 311 service requests</strong> - the non-emergency issues residents report to the city like potholes, graffiti, street cleaning, illegal dumping, and more.
-                        </p>
-
-                        <div class="bg-white rounded-lg p-4 mb-4">
-                            <h3 class="font-semibold text-gray-800 mb-2">✅ What You Can Do:</h3>
-                            <ul class="space-y-2 text-gray-700">
-                                <li><i class="fas fa-chart-line text-green-600 mr-2"></i>Explore <strong>50,000+ real 311 requests</strong> from the past 3 weeks</li>
-                                <li><i class="fas fa-map-marked-alt text-green-600 mr-2"></i>See which neighborhoods need the most city services</li>
-                                <li><i class="fas fa-search text-green-600 mr-2"></i>Identify trends and patterns in service requests</li>
-                                <li><i class="fas fa-clock text-blue-600 mr-2"></i><em>[Future]</em> Predict future service demand to help the city plan resources</li>
-                            </ul>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                            <div class="bg-gradient-to-r from-blue-100 to-blue-50 p-3 rounded-lg">
-                                <div class="font-semibold text-gray-700">Data Period</div>
-                                <div class="text-gray-800">Jan 23 - Feb 13, 2026</div>
-                            </div>
-                            <div class="bg-gradient-to-r from-green-100 to-green-50 p-3 rounded-lg">
-                                <div class="font-semibold text-gray-700">Total Requests</div>
-                                <div class="text-gray-800" id="introTotalRequests">50,000</div>
-                            </div>
-                            <div class="bg-gradient-to-r from-purple-100 to-purple-50 p-3 rounded-lg">
-                                <div class="font-semibold text-gray-700">Daily Average</div>
-                                <div class="text-gray-800" id="introDailyAvg">2,273 requests/day</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Status Cards -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div class="bg-white rounded-lg shadow p-6">
@@ -224,55 +181,75 @@
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                     <!-- Day of Week Pattern -->
                     <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-                        <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                        <h3 class="text-2xl font-bold text-gray-800 mb-4">
                             <i class="fas fa-calendar-week mr-2 text-indigo-600"></i>
                             Day of Week Pattern
                         </h3>
-                        <p class="text-gray-600 text-sm mb-6">
-                            <i class="fas fa-info-circle mr-1"></i>
-                            Optimize staffing by day. Monday-Tuesday have highest volumes.
-                        </p>
-                        <div id="dayOfWeekChart" style="height: 400px;"></div>
+                        <div id="dayOfWeekChart" style="height: 380px;"></div>
+                        <div id="dayOfWeekInsight" class="mt-6 p-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-500">
+                            <div class="flex items-start">
+                                <i class="fas fa-lightbulb text-indigo-600 text-xl mr-3 mt-1"></i>
+                                <div>
+                                    <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
+                                    <p class="text-gray-700 text-sm" id="dayOfWeekInsightText">Loading insights...</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Weather Impact -->
                     <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-                        <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                        <h3 class="text-2xl font-bold text-gray-800 mb-4">
                             <i class="fas fa-cloud-rain mr-2 text-blue-600"></i>
                             Weather Impact
                         </h3>
-                        <p class="text-gray-600 text-sm mb-6">
-                            <i class="fas fa-info-circle mr-1"></i>
-                            Rainy days dramatically change request patterns.
-                        </p>
-                        <div id="weatherImpactChart" style="height: 400px;"></div>
+                        <div id="weatherImpactChart" style="height: 380px;"></div>
+                        <div id="weatherInsight" class="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                            <div class="flex items-start">
+                                <i class="fas fa-lightbulb text-blue-600 text-xl mr-3 mt-1"></i>
+                                <div>
+                                    <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
+                                    <p class="text-gray-700 text-sm" id="weatherInsightText">Loading insights...</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Hourly Pattern (Full Width) -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
-                    <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">
                         <i class="fas fa-clock mr-2 text-orange-600"></i>
                         Peak Hours Analysis
                     </h3>
-                    <p class="text-gray-600 text-sm mb-6">
-                        <i class="fas fa-info-circle mr-1"></i>
-                        <strong>8-11 AM = 35% of daily volume.</strong> Staff heavily during morning rush.
-                    </p>
                     <div id="hourlyPatternChart" style="height: 350px;"></div>
+                    <div id="hourlyInsight" class="mt-6 p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
+                        <div class="flex items-start">
+                            <i class="fas fa-lightbulb text-orange-600 text-xl mr-3 mt-1"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
+                                <p class="text-gray-700 text-sm" id="hourlyInsightText">Loading insights...</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Monthly Trends (Full Width) -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-                    <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">
                         <i class="fas fa-chart-line mr-2 text-green-600"></i>
                         Monthly Trends & Seasonality
                     </h3>
-                    <p class="text-gray-600 text-sm mb-6">
-                        <i class="fas fa-info-circle mr-1"></i>
-                        8 months of data reveal seasonal patterns. January spike = +15% capacity needed.
-                    </p>
                     <div id="monthlyTrendsChart" style="height: 400px;"></div>
+                    <div id="monthlyInsight" class="mt-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                        <div class="flex items-start">
+                            <i class="fas fa-lightbulb text-green-600 text-xl mr-3 mt-1"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
+                                <p class="text-gray-700 text-sm" id="monthlyInsightText">Loading insights...</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -842,6 +819,17 @@
                 };
 
                 Plotly.newPlot('dayOfWeekChart', [trace], layout, { responsive: true, displayModeBar: false });
+
+                // Generate insight
+                const maxDay = data.days[data.counts.indexOf(Math.max(...data.counts))];
+                const minDay = data.days[data.counts.indexOf(Math.min(...data.counts))];
+                const maxCount = Math.max(...data.counts);
+                const minCount = Math.min(...data.counts);
+                const diff = ((maxCount - minCount) / minCount * 100).toFixed(0);
+
+                document.getElementById('dayOfWeekInsightText').innerHTML =
+                    `<strong>${maxDay}</strong> has ${diff}% more requests than <strong>${minDay}</strong>. ` +
+                    `Staff ${diff}% more resources on Mon-Tue vs weekends for optimal coverage.`;
             } catch (error) {
                 console.error('Failed to load day-of-week analytics:', error);
             }
@@ -882,6 +870,15 @@
                 };
 
                 Plotly.newPlot('hourlyPatternChart', [trace], layout, { responsive: true, displayModeBar: false });
+
+                // Generate insight
+                const totalRequests = data.counts.reduce((a, b) => a + b, 0);
+                const morning8to11 = data.counts.slice(8, 12).reduce((a, b) => a + b, 0);
+                const morningPct = (morning8to11 / totalRequests * 100).toFixed(0);
+
+                document.getElementById('hourlyInsightText').innerHTML =
+                    `<strong>${data.peak_hour}:00 is peak hour</strong> with ${data.peak_count.toLocaleString()} requests. ` +
+                    `Morning rush (8-11 AM) = <strong>${morningPct}% of daily volume</strong>. Schedule heavy staffing during these hours.`;
             } catch (error) {
                 console.error('Failed to load hourly pattern:', error);
             }
@@ -926,6 +923,20 @@
                 };
 
                 Plotly.newPlot('weatherImpactChart', [trace], layout, { responsive: true, displayModeBar: false });
+
+                // Generate insight
+                const biggestIncrease = data.category_impacts.filter(c => c.impact_percent > 0).sort((a, b) => b.impact_percent - a.impact_percent)[0];
+                const biggestDecrease = data.category_impacts.filter(c => c.impact_percent < 0).sort((a, b) => a.impact_percent - b.impact_percent)[0];
+
+                let insightText = `Overall, rainy days see <strong>${Math.abs(data.overall_impact_percent)}% ${data.overall_impact_percent < 0 ? 'fewer' : 'more'} requests</strong>. `;
+                if (biggestIncrease) {
+                    insightText += `<strong>${biggestIncrease.category}</strong> spikes ${biggestIncrease.impact_percent}% on rainy days. `;
+                }
+                if (biggestDecrease) {
+                    insightText += `Pre-position crews for rain-driven issues.`;
+                }
+
+                document.getElementById('weatherInsightText').innerHTML = insightText;
             } catch (error) {
                 console.error('Failed to load weather impact:', error);
                 document.getElementById('weatherImpactChart').innerHTML =
@@ -969,6 +980,16 @@
                 };
 
                 Plotly.newPlot('monthlyTrendsChart', [trace, avgLine], layout, { responsive: true, displayModeBar: false });
+
+                // Generate insight
+                const maxMonth = data.months[data.counts.indexOf(Math.max(...data.counts))];
+                const maxCount = Math.max(...data.counts);
+                const avgCount = data.average;
+                const spike = ((maxCount - avgCount) / avgCount * 100).toFixed(0);
+
+                document.getElementById('monthlyInsightText').innerHTML =
+                    `<strong>${maxMonth}</strong> showed a ${spike}% spike above average (${maxCount.toLocaleString()} vs ${avgCount.toLocaleString()}). ` +
+                    `Plan for ${spike}% extra capacity during winter months based on this seasonal pattern.`;
             } catch (error) {
                 console.error('Failed to load monthly trends:', error);
             }
