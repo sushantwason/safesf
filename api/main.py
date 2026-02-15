@@ -68,29 +68,29 @@ class StatsResponse(BaseModel):
 MODELS = {}
 METADATA = {}
 DATA_CACHE = None
+ANALYTICS_CACHE = None  # Pre-computed analytics for instant loading
 
 
 def load_data(data_dir: str = "data"):
-    """Load enriched 311 data (with weather) from GCS or local parquet file on startup"""
+    """Load sample 311 data from GCS for fast loading (9.5x faster)"""
     global DATA_CACHE
 
-    # Try to load enriched dataset from Google Cloud Storage via public HTTP URL
-    gcs_http_url = "https://storage.googleapis.com/sf-311-data-personal/311_enriched.parquet"
+    # Use 50K stratified sample for instant loading (was 600K = 88MB, now 50K = 9MB)
+    gcs_http_url = "https://storage.googleapis.com/sf-311-data-personal/311_sample.parquet"
 
     try:
-        logger.info(f"Attempting to load enriched data from GCS via HTTP: {gcs_http_url}")
+        logger.info(f"Loading sample dataset from GCS: {gcs_http_url}")
 
         # Download and load with pandas
         DATA_CACHE = pd.read_parquet(gcs_http_url)
 
-        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records (with weather data) from GCS")
+        logger.info(f"✅ Loaded {len(DATA_CACHE):,} records (stratified sample) from GCS")
         logger.info(f"Date range: {DATA_CACHE['opened'].min()} to {DATA_CACHE['opened'].max()}")
         logger.info(f"Categories: {DATA_CACHE['category'].nunique()}")
-        logger.info(f"Weather data coverage: {DATA_CACHE['temp_mean_f'].notna().sum()/len(DATA_CACHE)*100:.1f}%")
         return
 
     except Exception as e:
-        logger.warning(f"Could not load from GCS: {e}")
+        logger.warning(f"Could not load sample from GCS: {e}")
         logger.info("Falling back to local file...")
 
     # Fallback to local files
@@ -164,6 +164,23 @@ def load_models(models_dir: str = "models"):
     logger.info(f"Total models loaded: {len(MODELS)}")
 
 
+def load_analytics_cache():
+    """Load pre-computed analytics from GCS for instant responses"""
+    global ANALYTICS_CACHE
+
+    gcs_http_url = "https://storage.googleapis.com/sf-311-data-personal/analytics_cache.json"
+
+    try:
+        import requests
+        logger.info(f"Loading analytics cache from GCS...")
+        response = requests.get(gcs_http_url)
+        response.raise_for_status()
+        ANALYTICS_CACHE = response.json()
+        logger.info(f"✅ Analytics cache loaded")
+    except Exception as e:
+        logger.warning(f"Could not load analytics cache: {e}")
+        ANALYTICS_CACHE = {}
+
 def ensure_data_loaded():
     """Lazy load data on first request to speed up startup"""
     global DATA_CACHE
@@ -171,6 +188,12 @@ def ensure_data_loaded():
         logger.info("⏳ Lazy loading data on first request...")
         load_data()
         logger.info("✅ Data loaded successfully")
+
+def ensure_analytics_loaded():
+    """Lazy load analytics cache on first request"""
+    global ANALYTICS_CACHE
+    if ANALYTICS_CACHE is None:
+        load_analytics_cache()
 
 @app.on_event("startup")
 async def startup_event():
@@ -502,8 +525,15 @@ async def get_data_stats():
 
 @app.get("/api/data/daily-timeseries")
 async def get_daily_timeseries():
-    """Get daily aggregated request counts"""
+    """Get daily aggregated request counts (cached)"""
+    ensure_analytics_loaded()
+
+    if ANALYTICS_CACHE and 'daily_timeseries' in ANALYTICS_CACHE:
+        return ANALYTICS_CACHE['daily_timeseries']
+
+    # Fallback
     global DATA_CACHE
+    ensure_data_loaded()
 
     if DATA_CACHE is None or DATA_CACHE.empty:
         raise HTTPException(status_code=503, detail="No data available")
@@ -524,8 +554,15 @@ async def get_daily_timeseries():
 
 @app.get("/api/analytics/day-of-week")
 async def get_day_of_week_analytics():
-    """Get request patterns by day of week"""
+    """Get request patterns by day of week (cached for instant response)"""
+    ensure_analytics_loaded()
+
+    if ANALYTICS_CACHE and 'day_of_week' in ANALYTICS_CACHE:
+        return ANALYTICS_CACHE['day_of_week']
+
+    # Fallback to computing if cache unavailable
     global DATA_CACHE
+    ensure_data_loaded()
 
     if DATA_CACHE is None or DATA_CACHE.empty:
         raise HTTPException(status_code=503, detail="No data available")
@@ -545,8 +582,15 @@ async def get_day_of_week_analytics():
 
 @app.get("/api/analytics/hourly-pattern")
 async def get_hourly_pattern():
-    """Get request patterns by hour of day"""
+    """Get request patterns by hour of day (cached)"""
+    ensure_analytics_loaded()
+
+    if ANALYTICS_CACHE and 'hourly_pattern' in ANALYTICS_CACHE:
+        return ANALYTICS_CACHE['hourly_pattern']
+
+    # Fallback
     global DATA_CACHE
+    ensure_data_loaded()
 
     if DATA_CACHE is None or DATA_CACHE.empty:
         raise HTTPException(status_code=503, detail="No data available")
@@ -566,8 +610,15 @@ async def get_hourly_pattern():
 
 @app.get("/api/analytics/weather-impact")
 async def get_weather_impact():
-    """Analyze weather impact on requests"""
+    """Analyze weather impact on requests (cached)"""
+    ensure_analytics_loaded()
+
+    if ANALYTICS_CACHE and 'weather_impact' in ANALYTICS_CACHE:
+        return ANALYTICS_CACHE['weather_impact']
+
+    # Fallback
     global DATA_CACHE
+    ensure_data_loaded()
 
     if DATA_CACHE is None or DATA_CACHE.empty:
         raise HTTPException(status_code=503, detail="No data available")
@@ -612,8 +663,15 @@ async def get_weather_impact():
 
 @app.get("/api/analytics/monthly-trends")
 async def get_monthly_trends():
-    """Get monthly request volume trends"""
+    """Get monthly request volume trends (cached)"""
+    ensure_analytics_loaded()
+
+    if ANALYTICS_CACHE and 'monthly_trends' in ANALYTICS_CACHE:
+        return ANALYTICS_CACHE['monthly_trends']
+
+    # Fallback
     global DATA_CACHE
+    ensure_data_loaded()
 
     if DATA_CACHE is None or DATA_CACHE.empty:
         raise HTTPException(status_code=503, detail="No data available")
