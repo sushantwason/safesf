@@ -4,11 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SF 311 Request Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+    </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-gray-50 antialiased">
     <div class="min-h-screen">
         <!-- Header -->
         <header class="bg-blue-600 text-white shadow-lg">
@@ -133,26 +141,24 @@
                 </h2>
 
                 <!-- Volume Over Time -->
-                <div class="bg-white rounded-lg shadow p-6 mb-6">
-                    <div class="flex items-start justify-between mb-4">
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800">
-                                <i class="fas fa-chart-line mr-2 text-blue-600"></i>
-                                Request Volume Over Time
-                            </h3>
-                            <p class="text-gray-600 text-sm mt-1">
-                                <i class="fas fa-info-circle mr-1"></i>
-                                Daily count of 311 requests. Spikes may indicate city events, weather issues, or service problems.
-                            </p>
-                        </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
+                    <div class="mb-6">
+                        <h3 class="text-2xl font-bold text-gray-800">
+                            <i class="fas fa-chart-line mr-2 text-blue-600"></i>
+                            Request Volume Over Time
+                        </h3>
+                        <p class="text-gray-600 text-sm mt-2">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Daily count of 311 requests. Spikes may indicate city events, weather issues, or service problems.
+                        </p>
                     </div>
-                    <div id="historicalVolumeChart" class="h-96"></div>
+                    <div id="historicalVolumeChart"></div>
                 </div>
 
-                <!-- Two column layout for Category and Recent -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <!-- Two column layout for Category and District -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                     <!-- Top Categories -->
-                    <div class="bg-white rounded-lg shadow p-6">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
                         <h3 class="text-xl font-bold text-gray-800 mb-2">
                             <i class="fas fa-list-ol mr-2 text-green-600"></i>
                             Top Request Categories
@@ -540,20 +546,38 @@
                     type: 'scatter',
                     mode: 'lines+markers',
                     name: 'Daily Requests',
-                    line: { color: '#3b82f6', width: 2 },
-                    marker: { size: 6 }
+                    line: { color: '#3b82f6', width: 3, shape: 'spline', smoothing: 1.3 },
+                    marker: { size: 7, color: '#3b82f6', line: { color: '#1e40af', width: 1 } },
+                    fill: 'tozeroy',
+                    fillcolor: 'rgba(59, 130, 246, 0.1)'
                 };
 
                 const layout = {
-                    title: 'Request Volume Over Time',
-                    xaxis: { title: 'Date' },
-                    yaxis: { title: 'Number of Requests' },
+                    xaxis: {
+                        title: {
+                            text: 'Date',
+                            font: { size: 13, color: '#4B5563' }
+                        },
+                        gridcolor: '#F3F4F6',
+                        tickfont: { size: 11 }
+                    },
+                    yaxis: {
+                        title: {
+                            text: 'Number of Requests',
+                            font: { size: 13, color: '#4B5563' }
+                        },
+                        gridcolor: '#F3F4F6'
+                    },
                     hovermode: 'x unified',
                     showlegend: false,
-                    margin: { t: 40, r: 20, b: 40, l: 60 }
+                    margin: { t: 20, r: 20, b: 60, l: 65 },
+                    height: 400,
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    font: { family: 'Inter, system-ui, sans-serif' }
                 };
 
-                Plotly.newPlot('historicalVolumeChart', [trace], layout, { responsive: true });
+                Plotly.newPlot('historicalVolumeChart', [trace], layout, { responsive: true, displayModeBar: false });
             } catch (error) {
                 console.error('Failed to load historical trends:', error);
                 document.getElementById('historicalVolumeChart').innerHTML =
@@ -580,14 +604,26 @@
                 };
 
                 const layout = {
-                    title: 'Top 10 Request Categories',
-                    xaxis: { title: 'Number of Requests' },
-                    yaxis: { title: '' },
-                    margin: { t: 40, r: 20, b: 40, l: 150 },
-                    height: 400
+                    xaxis: {
+                        title: {
+                            text: 'Number of Requests',
+                            font: { size: 13, color: '#4B5563' }
+                        },
+                        gridcolor: '#F3F4F6'
+                    },
+                    yaxis: {
+                        title: '',
+                        tickfont: { size: 12 },
+                        automargin: true
+                    },
+                    margin: { t: 20, r: 20, b: 60, l: 200 },
+                    height: 500,
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    font: { family: 'Inter, system-ui, sans-serif' }
                 };
 
-                Plotly.newPlot('categoriesChart', [trace], layout, { responsive: true });
+                Plotly.newPlot('categoriesChart', [trace], layout, { responsive: true, displayModeBar: false });
             } catch (error) {
                 console.error('Failed to load category breakdown:', error);
                 document.getElementById('categoriesChart').innerHTML =
@@ -651,24 +687,44 @@
                     x: districts.map(d => {
                         const districtNum = d[0];
                         const name = DISTRICT_NAMES[districtNum] || `District ${districtNum}`;
-                        return `D${districtNum}: ${name}`;
+                        return `D${districtNum}<br>${name}`;
                     }),
                     y: districts.map(d => d[1]),
                     type: 'bar',
-                    marker: { color: '#10b981' }
+                    marker: {
+                        color: '#8b5cf6',
+                        line: { color: '#7c3aed', width: 1 }
+                    },
+                    text: districts.map(d => d[1]),
+                    textposition: 'outside',
+                    textfont: { size: 11, color: '#4B5563' }
                 };
 
                 const layout = {
-                    title: 'Requests by Supervisor District',
                     xaxis: {
-                        title: 'District',
-                        tickangle: -45
+                        title: {
+                            text: 'Supervisor District',
+                            font: { size: 13, color: '#4B5563' }
+                        },
+                        tickangle: 0,
+                        tickfont: { size: 11 },
+                        automargin: true
                     },
-                    yaxis: { title: 'Number of Requests' },
-                    margin: { t: 40, r: 20, b: 120, l: 60 }
+                    yaxis: {
+                        title: {
+                            text: 'Number of Requests',
+                            font: { size: 13, color: '#4B5563' }
+                        },
+                        gridcolor: '#F3F4F6'
+                    },
+                    margin: { t: 20, r: 20, b: 100, l: 60 },
+                    height: 500,
+                    paper_bgcolor: '#FFFFFF',
+                    plot_bgcolor: '#FAFAFA',
+                    font: { family: 'Inter, system-ui, sans-serif' }
                 };
 
-                Plotly.newPlot('geographicChart', [trace], layout, { responsive: true });
+                Plotly.newPlot('geographicChart', [trace], layout, { responsive: true, displayModeBar: false });
             } catch (error) {
                 console.error('Failed to load geographic data:', error);
                 document.getElementById('geographicChart').innerHTML =
