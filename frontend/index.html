@@ -3,1206 +3,887 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SF 311 Request Predictor</title>
+    <title>SF 311 Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        }
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        .tab-btn.active { color: #2563eb; border-bottom: 2px solid #2563eb; }
+        .tab-btn { border-bottom: 2px solid transparent; }
+        #mapContainer { height: calc(100vh - 160px); min-height: 500px; }
+        .leaflet-container { background: #f8fafc; }
+        .legend-panel { background: white; padding: 10px 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); max-height: 300px; overflow-y: auto; }
+        .legend-panel h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #374151; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #4b5563; padding: 2px 0; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     </style>
 </head>
 <body class="bg-gray-50 antialiased">
-    <div class="min-h-screen">
-        <!-- Header -->
-        <header class="bg-blue-600 text-white shadow-lg">
-            <div class="container mx-auto px-4 py-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h1 class="text-3xl font-bold flex items-center">
-                            <i class="fas fa-chart-line mr-3"></i>
-                            SF 311 Request Predictor
-                        </h1>
-                        <p class="text-blue-100 mt-1">Predictive analytics for San Francisco 311 service requests</p>
-                    </div>
-                    <div class="text-right">
-                        <div class="text-sm text-blue-100">Powered by SF Open Data</div>
-                        <div class="text-xs text-blue-200 mt-1">Updated daily at 6am PT</div>
-                    </div>
-                </div>
+    <!-- Fixed Top Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 h-14">
+        <div class="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
+            <div class="font-bold text-lg text-gray-900 tracking-tight">SF 311</div>
+            <div class="flex items-center gap-1">
+                <button class="tab-btn active px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="overview">Overview</button>
+                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="trends">Trends</button>
+                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="map">Map</button>
+                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="insights">Insights</button>
             </div>
-        </header>
-
-        <!-- Main Content -->
-        <main class="container mx-auto px-4 py-8">
-            <!-- Status Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-green-100 rounded-lg">
-                            <i class="fas fa-check-circle text-green-600 text-2xl"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-gray-500 text-sm">System Status</p>
-                            <p class="text-2xl font-bold text-gray-800" id="systemStatus">Loading...</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-blue-100 rounded-lg">
-                            <i class="fas fa-layer-group text-blue-600 text-2xl"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-gray-500 text-sm">Request Types</p>
-                            <p class="text-2xl font-bold text-gray-800" id="categoriesCount">-</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-purple-100 rounded-lg">
-                            <i class="fas fa-database text-purple-600 text-2xl"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-gray-500 text-sm">Total Requests</p>
-                            <p class="text-2xl font-bold text-gray-800" id="totalRequestsCount">50,000</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-orange-100 rounded-lg">
-                            <i class="fas fa-chart-bar text-orange-600 text-2xl"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-gray-500 text-sm">Daily Average</p>
-                            <p class="text-2xl font-bold text-gray-800" id="dailyAvgCount">2,273</p>
-                        </div>
-                    </div>
-                </div>
+            <div class="flex items-center gap-2">
+                <input type="date" id="startDate" class="text-xs border border-gray-300 rounded px-2 py-1">
+                <span class="text-gray-400 text-xs">to</span>
+                <input type="date" id="endDate" class="text-xs border border-gray-300 rounded px-2 py-1">
+                <button id="applyDateRange" class="text-xs bg-blue-600 text-white px-3 py-1 rounded font-medium hover:bg-blue-700 transition">Apply</button>
             </div>
+        </div>
+    </nav>
 
-            <!-- Historical Data Dashboard -->
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-history mr-2 text-blue-600"></i>
-                    Historical Data (Real 311 Requests)
-                </h2>
-
-                <!-- Volume Over Time -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
-                    <div class="mb-6">
-                        <h3 class="text-2xl font-bold text-gray-800">
-                            <i class="fas fa-chart-line mr-2 text-blue-600"></i>
-                            Request Volume Over Time
-                        </h3>
-                        <p class="text-gray-600 text-sm mt-2">
-                            <i class="fas fa-info-circle mr-1"></i>
-                            Daily count of 311 requests. Spikes may indicate city events, weather issues, or service problems.
-                        </p>
-                    </div>
-                    <div id="historicalVolumeChart"></div>
-                </div>
-
-                <!-- Two column layout for Category and District -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                    <!-- Top Categories -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-                        <h3 class="text-xl font-bold text-gray-800 mb-2">
-                            <i class="fas fa-list-ol mr-2 text-green-600"></i>
-                            Top Request Categories
-                        </h3>
-                        <p class="text-gray-600 text-sm mb-4">
-                            <i class="fas fa-info-circle mr-1"></i>
-                            Most common types of 311 requests submitted by SF residents.
-                        </p>
-                        <div id="categoriesChart" class="h-96"></div>
-                    </div>
-
-                    <!-- Geographic Distribution -->
-                    <div class="bg-white rounded-lg shadow p-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-2">
-                            <i class="fas fa-map-marked-alt mr-2 text-purple-600"></i>
-                            Requests by District
-                        </h3>
-                        <p class="text-gray-600 text-sm mb-4">
-                            <i class="fas fa-info-circle mr-1"></i>
-                            Service request distribution across SF's 11 supervisor districts.
-                        </p>
-                        <div id="geographicChart" class="h-96"></div>
-                    </div>
-                </div>
-
-                <!-- Recent Requests Table -->
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-xl font-bold text-gray-800 mb-2">
-                        <i class="fas fa-stream mr-2 text-orange-600"></i>
-                        Recent Service Requests
-                    </h3>
-                    <p class="text-gray-600 text-sm mb-4">
-                        <i class="fas fa-info-circle mr-1"></i>
-                        Latest 20 requests submitted to SF's 311 system. Refreshed from live data.
-                    </p>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">District</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="recentRequestsTable" class="bg-white divide-y divide-gray-200">
-                                <tr><td colspan="5" class="px-4 py-3 text-center text-gray-500">Loading recent requests...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Resource Planning & Trends Analysis -->
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-chart-pie mr-2 text-purple-600"></i>
-                    Resource Planning & Trends
-                </h2>
-
-                <!-- Day of Week + Weather Impact Row -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                    <!-- Day of Week Pattern -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-                        <h3 class="text-2xl font-bold text-gray-800 mb-4">
-                            <i class="fas fa-calendar-week mr-2 text-indigo-600"></i>
-                            Day of Week Pattern
-                        </h3>
-                        <div id="dayOfWeekChart" style="height: 380px;"></div>
-                        <div id="dayOfWeekInsight" class="mt-6 p-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-500">
-                            <div class="flex items-start">
-                                <i class="fas fa-lightbulb text-indigo-600 text-xl mr-3 mt-1"></i>
-                                <div>
-                                    <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
-                                    <p class="text-gray-700 text-sm" id="dayOfWeekInsightText">Loading insights...</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Weather Impact -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-                        <h3 class="text-2xl font-bold text-gray-800 mb-4">
-                            <i class="fas fa-cloud-rain mr-2 text-blue-600"></i>
-                            Weather Impact
-                        </h3>
-                        <div id="weatherImpactChart" style="height: 380px;"></div>
-                        <div id="weatherInsight" class="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                            <div class="flex items-start">
-                                <i class="fas fa-lightbulb text-blue-600 text-xl mr-3 mt-1"></i>
-                                <div>
-                                    <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
-                                    <p class="text-gray-700 text-sm" id="weatherInsightText">Loading insights...</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Hourly Pattern (Full Width) -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
-                    <h3 class="text-2xl font-bold text-gray-800 mb-4">
-                        <i class="fas fa-clock mr-2 text-orange-600"></i>
-                        Peak Hours Analysis
-                    </h3>
-                    <div id="hourlyPatternChart" style="height: 350px;"></div>
-                    <div id="hourlyInsight" class="mt-6 p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
-                        <div class="flex items-start">
-                            <i class="fas fa-lightbulb text-orange-600 text-xl mr-3 mt-1"></i>
-                            <div>
-                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
-                                <p class="text-gray-700 text-sm" id="hourlyInsightText">Loading insights...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Monthly Trends (Full Width) -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-                    <h3 class="text-2xl font-bold text-gray-800 mb-4">
-                        <i class="fas fa-chart-line mr-2 text-green-600"></i>
-                        Monthly Trends & Seasonality
-                    </h3>
-                    <div id="monthlyTrendsChart" style="height: 400px;"></div>
-                    <div id="monthlyInsight" class="mt-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                        <div class="flex items-start">
-                            <i class="fas fa-lightbulb text-green-600 text-xl mr-3 mt-1"></i>
-                            <div>
-                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
-                                <p class="text-gray-700 text-sm" id="monthlyInsightText">Loading insights...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Category-Specific Deep Insights -->
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-microscope mr-2 text-purple-600"></i>
-                    Category-Specific Deep Insights
-                </h2>
-                <p class="text-gray-600 mb-6">
-                    Actionable patterns for each request type to optimize resource deployment and staffing.
-                </p>
-
-                <!-- Category Growth Trends -->
-                <div class="mb-8">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
-                        <i class="fas fa-chart-line mr-2 text-purple-600"></i>
-                        Category Growth Trends (Last 8 Months)
-                    </h3>
-                    <div id="categoryGrowthChart" style="height: 400px;"></div>
-                    <div id="categoryGrowthInsight" class="mt-6 p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
-                        <div class="flex items-start">
-                            <i class="fas fa-lightbulb text-purple-600 text-xl mr-3 mt-1"></i>
-                            <div>
-                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
-                                <p class="text-gray-700 text-sm" id="categoryGrowthInsightText">Loading insights...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- District Hotspots by Category -->
-                <div class="mb-8">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
-                        <i class="fas fa-map-marked-alt mr-2 text-red-600"></i>
-                        District Hotspots by Category
-                    </h3>
-                    <div id="districtHotspotsChart" style="height: 300px;"></div>
-                    <div id="districtHotspotsInsight" class="mt-6 p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
-                        <div class="flex items-start">
-                            <i class="fas fa-lightbulb text-red-600 text-xl mr-3 mt-1"></i>
-                            <div>
-                                <p class="font-semibold text-gray-800 mb-1">Key Insight</p>
-                                <p class="text-gray-700 text-sm" id="districtHotspotsInsightText">Loading insights...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Top Actionable Recommendations -->
-                <div class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 border border-purple-200">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
-                        <i class="fas fa-tasks mr-2 text-purple-600"></i>
-                        Top Actionable Recommendations
-                    </h3>
-                    <div id="actionableRecommendations" class="space-y-3">
-                        <p class="text-gray-500">Loading recommendations...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Prediction Controls (Coming Soon) -->
-            <div class="bg-yellow-50 border-l-4 border-yellow-500 rounded-lg shadow p-6 mb-6">
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-exclamation-triangle text-yellow-500 text-2xl"></i>
-                    </div>
-                    <div class="ml-4">
-                        <h3 class="text-lg font-bold text-gray-800 mb-2">
-                            ⚠️ Predictions Coming Soon
-                        </h3>
-                        <p class="text-gray-700 mb-3">
-                            Machine learning models are not yet trained. To enable predictions, we need:
-                        </p>
-                        <ol class="list-decimal list-inside space-y-1 text-gray-700 mb-3">
-                            <li>Collect more historical data (need 6+ months)</li>
-                            <li>Train Prophet and XGBoost forecasting models</li>
-                            <li>Deploy updated models to production</li>
-                        </ol>
-                        <p class="text-gray-600 text-sm">
-                            <strong>For now:</strong> Explore the historical data above to understand request patterns and trends.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Prediction Controls -->
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">
-                    <i class="fas fa-sliders-h mr-2"></i>
-                    Prediction Controls
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                        <select id="categorySelect" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
-                            <option value="">Loading categories...</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Forecast Days</label>
-                        <input type="number" id="forecastDays" value="7" min="1" max="30"
-                               class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Model</label>
-                        <select id="modelSelect" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500">
-                            <option value="prophet">Prophet (Time Series)</option>
-                            <option value="xgboost">XGBoost (ML)</option>
-                        </select>
-                    </div>
-                    <div class="flex items-end">
-                        <button onclick="getPrediction()"
-                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200">
-                            <i class="fas fa-magic mr-2"></i>
-                            Generate Prediction
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Prediction Chart -->
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">
-                    <i class="fas fa-chart-area mr-2"></i>
-                    Volume Prediction
-                </h2>
-                <div id="predictionChart" class="h-96"></div>
-            </div>
-
-            <!-- Trends Section -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">
-                        <i class="fas fa-trending-up mr-2"></i>
-                        30-Day Trends
-                    </h2>
-                    <div id="trendsContainer" class="space-y-3">
-                        <p class="text-gray-500 text-center py-8">Select a category to view trends</p>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">
-                        <i class="fas fa-map-marked-alt mr-2"></i>
-                        Predicted Hotspots
-                    </h2>
-                    <div id="hotspotsContainer" class="space-y-3">
-                        <p class="text-gray-500 text-center py-8">Loading hotspot predictions...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Model Performance -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-800 mb-4">
-                    <i class="fas fa-chart-bar mr-2"></i>
-                    Model Performance Metrics
-                </h2>
-                <div id="metricsTable" class="overflow-x-auto">
-                    <p class="text-gray-500 text-center py-8">Loading metrics...</p>
-                </div>
-            </div>
-        </main>
-
-        <!-- Footer -->
-        <footer class="bg-gray-800 text-white mt-12">
-            <div class="container mx-auto px-4 py-6">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-sm">Built with SF Open Data for the public good</p>
-                        <p class="text-xs text-gray-400 mt-1">Data updated nightly from data.sfgov.org</p>
-                    </div>
-                    <div class="flex space-x-4">
-                        <a href="https://data.sfgov.org/" target="_blank" class="text-gray-400 hover:text-white transition">
-                            <i class="fas fa-database"></i> Data Source
-                        </a>
-                        <a href="/docs" class="text-gray-400 hover:text-white transition">
-                            <i class="fas fa-book"></i> API Docs
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </footer>
+    <!-- Category Filter Bar -->
+    <div class="fixed top-14 left-0 right-0 z-40 bg-gray-50 border-b border-gray-200 h-10">
+        <div class="max-w-7xl mx-auto px-4 h-full flex items-center">
+            <label class="text-xs text-gray-500 mr-2 font-medium">Category:</label>
+            <select id="globalCategoryFilter" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
+                <option value="">All Categories</option>
+            </select>
+        </div>
     </div>
 
+    <!-- Main Content (offset for fixed nav + filter bar) -->
+    <main class="pt-24 max-w-7xl mx-auto px-4 pb-16">
+
+        <!-- Tab: Overview -->
+        <div data-tab-content="overview">
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Open Requests</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1" id="kpiOpen">--</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Avg Resolution</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1" id="kpiResolution">-- hrs</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Anomalies This Week</p>
+                    <p class="text-2xl font-bold mt-1" id="kpiAnomalies">--</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Busiest District</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1" id="kpiBusiest">--</p>
+                    <p class="text-xs text-gray-400 mt-0.5" id="kpiBusiestCount"></p>
+                </div>
+            </div>
+
+            <!-- Anomaly Alerts (conditional) -->
+            <div id="anomalyAlerts" class="hidden mb-6">
+                <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <p class="text-sm font-semibold text-red-800 mb-1">Anomalies Detected</p>
+                    <div id="anomalyList" class="text-sm text-red-700"></div>
+                </div>
+            </div>
+
+            <!-- Volume Over Time -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Request Volume Over Time</h3>
+                <div id="volumeChart" style="height:320px;"></div>
+            </div>
+
+            <!-- Two Column: Categories + Districts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-4">Top Request Categories</h3>
+                    <div id="categoriesChart" style="height:380px;"></div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-4">Requests by District</h3>
+                    <div id="districtChart" style="height:380px;"></div>
+                </div>
+            </div>
+
+            <!-- Recent Activity Table -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Recent Activity</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-100">
+                                <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                                <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Category</th>
+                                <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Address</th>
+                                <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">District</th>
+                                <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentTable" class="divide-y divide-gray-50">
+                            <tr><td colspan="5" class="py-8 text-center text-gray-400">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Trends -->
+        <div data-tab-content="trends" class="hidden">
+            <!-- Day of Week + Hourly -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-4">Day of Week Pattern</h3>
+                    <div id="dowChart" style="height:300px;"></div>
+                    <p class="text-xs text-gray-500 mt-3" id="dowInsight"></p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-4">Hourly Pattern</h3>
+                    <div id="hourlyChart" style="height:300px;"></div>
+                    <p class="text-xs text-gray-500 mt-3" id="hourlyInsight"></p>
+                </div>
+            </div>
+
+            <!-- Monthly Trends -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Monthly Trends &amp; Seasonality</h3>
+                <div id="monthlyChart" style="height:320px;"></div>
+                <p class="text-xs text-gray-500 mt-3" id="monthlyInsight"></p>
+            </div>
+
+            <!-- Category Growth -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Category Growth Trends</h3>
+                <div id="growthChart" style="height:360px;"></div>
+                <p class="text-xs text-gray-500 mt-3" id="growthInsight"></p>
+            </div>
+
+            <!-- Resolution Time Analysis -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Resolution Time Analysis</h3>
+                <div id="resolutionChart" style="height:360px;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Map -->
+        <div data-tab-content="map" class="hidden">
+            <div class="mb-3" id="mapCategoryToggles"></div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div id="mapContainer"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Insights -->
+        <div data-tab-content="insights" class="hidden">
+            <!-- District Hotspots -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">District Hotspots by Category</h3>
+                <div id="hotspotsChart" style="height:300px;"></div>
+            </div>
+
+            <!-- Actionable Recommendations -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Top Actionable Recommendations</h3>
+                <div id="recommendations" class="space-y-3">
+                    <p class="text-gray-400 text-sm py-4 text-center">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Comparative Period Summary -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Comparative Period Summary</h3>
+                <div id="comparativeSummary" class="text-sm text-gray-600">
+                    <p class="text-gray-400 text-center py-4">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 bg-white">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <p class="text-xs text-gray-400">SF 311 Data &middot; Updated daily &middot; data.sfgov.org</p>
+            <div class="flex items-center gap-4">
+                <button id="exportCsv" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Export CSV</button>
+                <a href="/docs" class="text-xs text-gray-400 hover:text-gray-600">API Docs</a>
+            </div>
+        </div>
+    </footer>
+
     <script>
-        const API_URL = window.location.origin;  // Adjust for your deployment
+    const API_URL = window.location.origin;
 
-        // San Francisco Supervisor District names
-        const DISTRICT_NAMES = {
-            1: 'Richmond',
-            2: 'Marina, Cow Hollow',
-            3: 'North Beach, Chinatown',
-            4: 'Sunset',
-            5: 'Haight-Ashbury, Fillmore',
-            6: 'SOMA, Tenderloin',
-            7: 'Mission, Bernal Heights',
-            8: 'Castro, Noe Valley',
-            9: 'Mission, Portola',
-            10: 'Potrero Hill, Bayview',
-            11: 'Excelsior, Outer Mission'
-        };
+    const DISTRICT_NAMES = {
+        1: 'Richmond', 2: 'Marina, Cow Hollow', 3: 'North Beach, Chinatown',
+        4: 'Sunset', 5: 'Haight-Ashbury, Fillmore', 6: 'SOMA, Tenderloin',
+        7: 'Mission, Bernal Heights', 8: 'Castro, Noe Valley', 9: 'Mission, Portola',
+        10: 'Potrero Hill, Bayview', 11: 'Excelsior, Outer Mission'
+    };
 
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', async () => {
-            await checkHealth();
-            await loadCategories();
-            await loadMetrics();
+    const CHART_CONFIG = { responsive: true, displayModeBar: false };
+    const CHART_LAYOUT_BASE = {
+        paper_bgcolor: '#FFFFFF',
+        plot_bgcolor: '#FFFFFF',
+        font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#374151' },
+        margin: { t: 10, r: 20, b: 50, l: 60 },
+        xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+        yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+    };
 
-            // Load historical data visualizations
-            await loadHistoricalTrends();
-            await loadCategoryBreakdown();
-            await loadRecentRequests();
-            await loadGeographicData();
+    const MAP_CATEGORY_COLORS = [
+        '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed',
+        '#0891b2', '#be185d', '#4f46e5', '#ca8a04', '#059669',
+        '#9333ea', '#e11d48', '#0284c7', '#65a30d', '#c026d3',
+        '#ea580c', '#1d4ed8', '#15803d', '#b91c1c', '#7e22ce'
+    ];
 
-            // Load resource planning & trends analytics
-            await loadDayOfWeekAnalytics();
-            await loadHourlyPattern();
-            await loadWeatherImpact();
-            await loadMonthlyTrends();
+    // State
+    let categoriesList = [];
+    let tabDataLoaded = { overview: false, trends: false, map: false, insights: false };
+    let leafletMap = null;
+    let mapLayerGroups = {};
+    let mapData = null;
 
-            // Load category-specific deep insights
-            await loadCategoryGrowthTrends();
-            await loadDistrictHotspots();
+    // ---- Utility functions ----
 
-            // Load prediction features (will show as unavailable if models not loaded)
-            await loadHotspots();
+    function showError(containerId, retryFn) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        el.innerHTML = '<div class="text-center py-8 text-gray-400"><p>Unable to load data</p>' +
+            (retryFn ? '<button onclick="' + retryFn + '()" class="text-blue-600 text-sm mt-2">Retry</button>' : '') +
+            '</div>';
+    }
+
+    async function apiFetch(path) {
+        const resp = await fetch(API_URL + path);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+    }
+
+    function buildLayout(overrides) {
+        return Object.assign({}, CHART_LAYOUT_BASE, overrides, {
+            xaxis: Object.assign({}, CHART_LAYOUT_BASE.xaxis, overrides.xaxis || {}),
+            yaxis: Object.assign({}, CHART_LAYOUT_BASE.yaxis, overrides.yaxis || {}),
+        });
+    }
+
+    function getDateParams() {
+        const s = document.getElementById('startDate').value;
+        const e = document.getElementById('endDate').value;
+        let params = '';
+        if (s) params += '?start_date=' + s;
+        if (e) params += (params ? '&' : '?') + 'end_date=' + e;
+        return params;
+    }
+
+    // ---- Tab switching ----
+
+    function initTabs() {
+        const btns = document.querySelectorAll('.tab-btn');
+        btns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.getAttribute('data-tab');
+                btns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('[data-tab-content]').forEach(el => {
+                    el.classList.toggle('hidden', el.getAttribute('data-tab-content') !== tab);
+                });
+                window.location.hash = tab;
+                loadTabData(tab);
+            });
         });
 
-        async function checkHealth() {
-            try {
-                const response = await fetch(`${API_URL}/health`);
-                const data = await response.json();
-                // Health check succeeded, API is working
-                console.log('API health check:', data.status);
-            } catch (error) {
-                console.error('Health check failed:', error);
-            }
+        // Restore from hash
+        const hash = window.location.hash.replace('#', '');
+        if (hash && ['overview', 'trends', 'map', 'insights'].includes(hash)) {
+            btns.forEach(b => {
+                b.classList.toggle('active', b.getAttribute('data-tab') === hash);
+            });
+            document.querySelectorAll('[data-tab-content]').forEach(el => {
+                el.classList.toggle('hidden', el.getAttribute('data-tab-content') !== hash);
+            });
+            loadTabData(hash);
+        }
+    }
+
+    async function loadTabData(tab) {
+        if (tabDataLoaded[tab]) return;
+        tabDataLoaded[tab] = true;
+        switch (tab) {
+            case 'overview': await loadOverview(); break;
+            case 'trends': await loadTrends(); break;
+            case 'map': await loadMap(); break;
+            case 'insights': await loadInsights(); break;
+        }
+    }
+
+    // ---- Overview Tab ----
+
+    async function loadOverview() {
+        const [health, categories, stats, timeseries, districtData, recent, resolution, anomaliesData] = await Promise.all([
+            apiFetch('/health').catch(() => null),
+            apiFetch('/api/categories').catch(() => null),
+            apiFetch('/api/data/stats').catch(() => null),
+            apiFetch('/api/data/daily-timeseries' + getDateParams()).catch(() => null),
+            apiFetch('/api/analytics/district-breakdown').catch(() => null),
+            apiFetch('/api/data/recent?limit=10').catch(() => null),
+            apiFetch('/api/analytics/resolution-time').catch(() => null),
+            apiFetch('/api/analytics/anomalies').catch(() => null),
+        ]);
+
+        // Populate category dropdown
+        if (categories && categories.categories) {
+            categoriesList = categories.categories;
+            const select = document.getElementById('globalCategoryFilter');
+            select.innerHTML = '<option value="">All Categories</option>' +
+                categoriesList.map(c => '<option value="' + c + '">' + c + '</option>').join('');
         }
 
-        async function loadCategories() {
-            try {
-                const response = await fetch(`${API_URL}/api/categories`);
-                const data = await response.json();
+        // KPI cards
+        if (stats) {
+            document.getElementById('kpiOpen').textContent = (stats.total_requests || 0).toLocaleString();
+        }
+        if (resolution && resolution.overall_avg_hours != null) {
+            document.getElementById('kpiResolution').textContent = Math.round(resolution.overall_avg_hours) + ' hrs';
+        }
 
-                const select = document.getElementById('categorySelect');
-                select.innerHTML = data.categories.map(cat =>
-                    `<option value="${cat}">${cat}</option>`
+        // Anomalies KPI - use server-side anomaly detection
+        if (anomaliesData && anomaliesData.anomalies) {
+            const anomalies = anomaliesData.anomalies;
+            const kpiEl = document.getElementById('kpiAnomalies');
+            kpiEl.textContent = anomalies.length;
+            kpiEl.className = 'text-2xl font-bold mt-1 ' + (anomalies.length > 0 ? 'text-red-600' : 'text-gray-900');
+
+            if (anomalies.length > 0) {
+                document.getElementById('anomalyAlerts').classList.remove('hidden');
+                document.getElementById('anomalyList').innerHTML = anomalies.slice(0, 5).map(a =>
+                    '<p>' + a.category + ' spiked ' + a.deviation_factor + 'x above normal on ' + a.date +
+                    ' (' + a.actual_count + ' vs expected ' + a.expected_count + ')</p>'
                 ).join('');
-            } catch (error) {
-                console.error('Failed to load categories:', error);
+            }
+        } else if (timeseries && timeseries.dates && timeseries.counts) {
+            // Fallback: client-side detection from timeseries
+            const anomalies = detectAnomalies(timeseries);
+            const kpiEl = document.getElementById('kpiAnomalies');
+            kpiEl.textContent = anomalies.length;
+            kpiEl.className = 'text-2xl font-bold mt-1 ' + (anomalies.length > 0 ? 'text-red-600' : 'text-gray-900');
+
+            if (anomalies.length > 0) {
+                document.getElementById('anomalyAlerts').classList.remove('hidden');
+                document.getElementById('anomalyList').innerHTML = anomalies.map(a =>
+                    '<p>' + a + '</p>'
+                ).join('');
             }
         }
 
-        async function getPrediction() {
-            const category = document.getElementById('categorySelect').value;
-            const days = document.getElementById('forecastDays').value;
-            const model = document.getElementById('modelSelect').value;
+        // Volume chart
+        if (timeseries && timeseries.dates && timeseries.dates.length > 0) {
+            renderVolumeChart(timeseries);
+        } else {
+            showError('volumeChart', 'loadOverview');
+        }
 
-            if (!category) {
-                alert('Please select a category');
+        // Categories chart
+        if (stats && stats.top_categories) {
+            renderCategoriesChart(stats.top_categories);
+        } else if (stats && stats.categories) {
+            const top = Object.entries(stats.categories).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            renderCategoriesChart(Object.fromEntries(top));
+        } else {
+            showError('categoriesChart');
+        }
+
+        // District chart
+        if (districtData && districtData.districts && districtData.districts.length > 0) {
+            renderDistrictBreakdown(districtData.districts);
+            // Fill busiest district KPI
+            const top = districtData.districts[0];
+            document.getElementById('kpiBusiest').textContent = top.name;
+            document.getElementById('kpiBusiestCount').textContent = top.count.toLocaleString() + ' requests';
+        } else {
+            showError('districtChart');
+        }
+
+        // Recent table
+        if (recent && recent.data) {
+            renderRecentTable(recent.data);
+        } else {
+            document.getElementById('recentTable').innerHTML =
+                '<tr><td colspan="5" class="py-8 text-center text-gray-400">Unable to load data</td></tr>';
+        }
+    }
+
+    function detectAnomalies(ts) {
+        const counts = ts.counts;
+        const dates = ts.dates;
+        if (counts.length < 14) return [];
+
+        const recentCounts = counts.slice(-7);
+        const prevCounts = counts.slice(-14, -7);
+        const prevAvg = prevCounts.reduce((a, b) => a + b, 0) / prevCounts.length;
+        const prevStd = Math.sqrt(prevCounts.reduce((s, c) => s + Math.pow(c - prevAvg, 2), 0) / prevCounts.length);
+
+        const anomalies = [];
+        recentCounts.forEach((c, i) => {
+            if (prevStd > 0 && (c - prevAvg) / prevStd > 2.5) {
+                const ratio = (c / prevAvg).toFixed(1);
+                const date = dates[dates.length - 7 + i];
+                anomalies.push('Volume spiked ' + ratio + 'x above normal on ' + date);
+            }
+        });
+        return anomalies;
+    }
+
+    function renderVolumeChart(ts) {
+        const trace = {
+            x: ts.dates,
+            y: ts.counts,
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: { color: '#2563eb', width: 2 },
+            marker: { size: 3, color: '#2563eb' },
+        };
+        const layout = buildLayout({
+            margin: { t: 10, r: 20, b: 40, l: 50 },
+            xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+            yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Requests', font: { size: 11 } } },
+            hovermode: 'x unified',
+        });
+        Plotly.newPlot('volumeChart', [trace], layout, CHART_CONFIG);
+    }
+
+    function renderCategoriesChart(cats) {
+        const entries = Object.entries(cats).sort((a, b) => a[1] - b[1]);
+        const trace = {
+            y: entries.map(e => e[0]),
+            x: entries.map(e => e[1]),
+            type: 'bar',
+            orientation: 'h',
+            marker: { color: '#2563eb' },
+        };
+        const layout = buildLayout({
+            margin: { t: 10, r: 20, b: 40, l: 180 },
+            yaxis: { automargin: true, gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+            xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Count', font: { size: 11 } } },
+        });
+        Plotly.newPlot('categoriesChart', [trace], layout, CHART_CONFIG);
+    }
+
+    function renderDistrictBreakdown(districts) {
+        // districts is array of {district, name, count, percentage} sorted by count desc
+        const sorted = [...districts].sort((a, b) => a.count - b.count); // ascending for horizontal bar
+        const trace = {
+            y: sorted.map(d => 'D' + d.district + ': ' + d.name),
+            x: sorted.map(d => d.count),
+            type: 'bar',
+            orientation: 'h',
+            marker: { color: '#2563eb' },
+        };
+        const layout = buildLayout({
+            margin: { t: 10, r: 20, b: 40, l: 180 },
+            yaxis: { automargin: true, gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+            xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Count', font: { size: 11 } } },
+        });
+        Plotly.newPlot('districtChart', [trace], layout, CHART_CONFIG);
+    }
+
+    function renderRecentTable(data) {
+        const tbody = document.getElementById('recentTable');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-gray-400">No recent data</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.slice(0, 10).map(r => {
+            const dNum = r.district != null ? Math.floor(r.district) : null;
+            const dName = dNum !== null ? (DISTRICT_NAMES[dNum] ? 'D' + dNum + ': ' + DISTRICT_NAMES[dNum] : 'D' + dNum) : '--';
+            const statusClass = r.status === 'Closed' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700';
+            return '<tr class="hover:bg-gray-50">' +
+                '<td class="py-2 px-3 text-gray-600">' + (r.opened ? new Date(r.opened).toLocaleDateString() : '--') + '</td>' +
+                '<td class="py-2 px-3 text-gray-900">' + (r.category || '--') + '</td>' +
+                '<td class="py-2 px-3 text-gray-600 max-w-xs truncate">' + (r.address || '--') + '</td>' +
+                '<td class="py-2 px-3 text-gray-600">' + dName + '</td>' +
+                '<td class="py-2 px-3"><span class="text-xs px-2 py-0.5 rounded-full font-medium ' + statusClass + '">' + (r.status || '--') + '</span></td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    // ---- Trends Tab ----
+
+    async function loadTrends() {
+        const params = getDateParams();
+        const [dow, hourly, monthly, insights, resolution] = await Promise.all([
+            apiFetch('/api/analytics/day-of-week' + params).catch(() => null),
+            apiFetch('/api/analytics/hourly-pattern' + params).catch(() => null),
+            apiFetch('/api/analytics/monthly-trends' + params).catch(() => null),
+            apiFetch('/api/analytics/category-insights').catch(() => null),
+            apiFetch('/api/analytics/resolution-time').catch(() => null),
+        ]);
+
+        // Day of week
+        if (dow && dow.days) {
+            const trace = {
+                x: dow.days,
+                y: dow.counts,
+                type: 'bar',
+                marker: { color: '#2563eb' },
+            };
+            const layout = buildLayout({
+                margin: { t: 10, r: 20, b: 40, l: 50 },
+                yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Requests', font: { size: 11 } } },
+            });
+            Plotly.newPlot('dowChart', [trace], layout, CHART_CONFIG);
+
+            const maxDay = dow.days[dow.counts.indexOf(Math.max(...dow.counts))];
+            const minDay = dow.days[dow.counts.indexOf(Math.min(...dow.counts))];
+            const diff = ((Math.max(...dow.counts) - Math.min(...dow.counts)) / Math.min(...dow.counts) * 100).toFixed(0);
+            document.getElementById('dowInsight').textContent =
+                maxDay + ' sees ' + diff + '% more requests than ' + minDay + '. Plan heavier staffing early in the week.';
+        } else {
+            showError('dowChart');
+        }
+
+        // Hourly
+        if (hourly && hourly.hours) {
+            const trace = {
+                x: hourly.hours.map(h => h + ':00'),
+                y: hourly.counts,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#2563eb', width: 2 },
+                marker: { size: 4, color: '#2563eb' },
+            };
+            const layout = buildLayout({
+                margin: { t: 10, r: 20, b: 40, l: 50 },
+                yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Requests', font: { size: 11 } } },
+                annotations: [{
+                    x: hourly.peak_hour + ':00',
+                    y: hourly.peak_count,
+                    text: 'Peak: ' + hourly.peak_hour + ':00',
+                    showarrow: true, arrowhead: 2, ax: 0, ay: -30,
+                    font: { size: 11, color: '#2563eb' },
+                }],
+            });
+            Plotly.newPlot('hourlyChart', [trace], layout, CHART_CONFIG);
+
+            const total = hourly.counts.reduce((a, b) => a + b, 0);
+            const morning = hourly.counts.slice(8, 12).reduce((a, b) => a + b, 0);
+            const pct = (morning / total * 100).toFixed(0);
+            document.getElementById('hourlyInsight').textContent =
+                'Peak at ' + hourly.peak_hour + ':00. Morning rush (8-11 AM) accounts for ' + pct + '% of daily volume.';
+        } else {
+            showError('hourlyChart');
+        }
+
+        // Monthly
+        if (monthly && monthly.months) {
+            const trace = {
+                x: monthly.months,
+                y: monthly.counts,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#2563eb', width: 2 },
+                marker: { size: 5, color: '#2563eb' },
+            };
+            const avgLine = {
+                x: monthly.months,
+                y: new Array(monthly.months.length).fill(monthly.average),
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#9ca3af', width: 1, dash: 'dash' },
+                name: 'Average',
+                showlegend: false,
+            };
+            const layout = buildLayout({
+                margin: { t: 10, r: 20, b: 40, l: 60 },
+                yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Requests', font: { size: 11 } } },
+                showlegend: false,
+            });
+            Plotly.newPlot('monthlyChart', [trace, avgLine], layout, CHART_CONFIG);
+
+            const maxIdx = monthly.counts.indexOf(Math.max(...monthly.counts));
+            const spike = ((monthly.counts[maxIdx] - monthly.average) / monthly.average * 100).toFixed(0);
+            document.getElementById('monthlyInsight').textContent =
+                monthly.months[maxIdx] + ' peaked ' + spike + '% above average. Plan extra capacity during seasonal highs.';
+        } else {
+            showError('monthlyChart');
+        }
+
+        // Category growth
+        if (insights && insights.category_growth_trends) {
+            const trends = insights.category_growth_trends;
+            const trace = {
+                y: trends.map(t => t.category),
+                x: trends.map(t => t.growth_pct),
+                type: 'bar',
+                orientation: 'h',
+                marker: { color: trends.map(t => t.growth_pct < 0 ? '#16a34a' : '#dc2626') },
+                text: trends.map(t => (t.growth_pct > 0 ? '+' : '') + t.growth_pct + '%'),
+                textposition: 'outside',
+                textfont: { size: 11 },
+            };
+            const layout = buildLayout({
+                margin: { t: 10, r: 60, b: 40, l: 200 },
+                yaxis: { automargin: true, gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+                xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', zeroline: true, zerolinecolor: '#d1d5db', title: { text: 'Growth %', font: { size: 11 } } },
+            });
+            Plotly.newPlot('growthChart', [trace], layout, CHART_CONFIG);
+
+            const declining = trends.filter(t => t.growth_pct < 0);
+            document.getElementById('growthInsight').textContent =
+                declining.length + ' categories declining. ' + (trends[0] ? trends[0].category + ' shows largest change at ' + trends[0].growth_pct + '%.' : '');
+        } else {
+            showError('growthChart');
+        }
+
+        // Resolution time
+        if (resolution && resolution.categories && resolution.categories.length > 0) {
+            const items = resolution.categories.slice(0, 10);
+            const cats = items.map(c => c.category);
+            const hours = items.map(c => c.avg_hours);
+            const colors = hours.map(h => h > 72 ? '#dc2626' : h > 24 ? '#d97706' : '#16a34a');
+            const trace = {
+                y: cats,
+                x: hours,
+                type: 'bar',
+                orientation: 'h',
+                marker: { color: colors },
+                text: hours.map(h => Math.round(h) + 'h'),
+                textposition: 'outside',
+                textfont: { size: 11 },
+            };
+            const layout = buildLayout({
+                margin: { t: 10, r: 50, b: 40, l: 200 },
+                yaxis: { automargin: true, gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+                xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Avg Hours to Resolution', font: { size: 11 } } },
+            });
+            Plotly.newPlot('resolutionChart', [trace], layout, CHART_CONFIG);
+        } else {
+            showError('resolutionChart');
+        }
+    }
+
+    // ---- Map Tab ----
+
+    async function loadMap() {
+        // Initialize Leaflet map
+        leafletMap = L.map('mapContainer', { zoomControl: true }).setView([37.7749, -122.4194], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 19,
+        }).addTo(leafletMap);
+
+        // Fetch map data
+        try {
+            const data = await apiFetch('/api/analytics/map-data');
+            mapData = data;
+            if (!data || !data.categories || data.categories.length === 0) {
+                showMapEmpty();
                 return;
             }
-
-            try {
-                const response = await fetch(
-                    `${API_URL}/api/predict/volume?category=${encodeURIComponent(category)}&days=${days}&model=${model}`
-                );
-                const data = await response.json();
-
-                // Plot predictions
-                plotPrediction(data);
-
-                // Load trends for this category
-                loadTrends(category);
-
-            } catch (error) {
-                console.error('Prediction failed:', error);
-                alert('Prediction failed: ' + error.message);
-            }
+            // Flatten categories into points with color info for rendering
+            renderMapCategories(data.categories);
+        } catch (e) {
+            showMapEmpty();
         }
+    }
 
-        function plotPrediction(data) {
-            const dates = data.predictions.map(p => p.date);
-            const volumes = data.predictions.map(p => p.predicted_volume);
-            const lowerBounds = data.predictions.map(p => p.lower_bound || p.predicted_volume * 0.8);
-            const upperBounds = data.predictions.map(p => p.upper_bound || p.predicted_volume * 1.2);
+    function showMapEmpty() {
+        const container = document.getElementById('mapContainer');
+        const overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 flex items-center justify-center z-[1000] pointer-events-none';
+        overlay.innerHTML = '<div class="bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-4 text-center">' +
+            '<p class="text-gray-500 text-sm">No geographic data available</p></div>';
+        container.style.position = 'relative';
+        container.appendChild(overlay);
+    }
 
-            const traces = [
-                {
-                    x: dates,
-                    y: volumes,
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    name: 'Predicted Volume',
-                    line: { color: '#2563eb', width: 3 },
-                    marker: { size: 8 }
-                },
-                {
-                    x: dates,
-                    y: upperBounds,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: 'Upper Bound',
-                    line: { color: '#93c5fd', width: 1, dash: 'dash' },
-                    fill: 'tonexty',
-                    fillcolor: 'rgba(37, 99, 235, 0.1)'
-                },
-                {
-                    x: dates,
-                    y: lowerBounds,
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: 'Lower Bound',
-                    line: { color: '#93c5fd', width: 1, dash: 'dash' }
+    function renderMapCategories(categories) {
+        // categories is an array of {category, points: [{lat, lon}], count, color}
+        const categoryNames = categories.map(c => c.category);
+        const colorMap = {};
+        categories.forEach(c => { colorMap[c.category] = c.color; });
+
+        // Create layer groups per category
+        categories.forEach(catObj => {
+            const lg = L.layerGroup();
+            catObj.points.forEach(p => {
+                if (p.lat && p.lon) {
+                    L.circleMarker([p.lat, p.lon], {
+                        radius: 4,
+                        fillColor: catObj.color,
+                        color: catObj.color,
+                        weight: 0.5,
+                        fillOpacity: 0.6,
+                    }).bindPopup('<strong>' + catObj.category + '</strong><br>' + p.lat.toFixed(4) + ', ' + p.lon.toFixed(4))
+                      .addTo(lg);
                 }
-            ];
+            });
+            lg.addTo(leafletMap);
+            mapLayerGroups[catObj.category] = lg;
+        });
 
-            const layout = {
-                title: `Predicted 311 Requests: ${data.category}`,
-                xaxis: { title: 'Date' },
-                yaxis: { title: 'Number of Requests' },
-                hovermode: 'x unified',
-                showlegend: true
-            };
+        // Render toggles
+        const toggleContainer = document.getElementById('mapCategoryToggles');
+        toggleContainer.innerHTML = '<div class="flex flex-wrap gap-2">' +
+            categories.map(c =>
+                '<label class="inline-flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-3 py-1 cursor-pointer hover:bg-gray-50">' +
+                '<input type="checkbox" checked class="sr-only" data-map-cat="' + c.category + '">' +
+                '<span class="w-2.5 h-2.5 rounded-full inline-block" style="background:' + c.color + '"></span>' +
+                '<span class="text-gray-700">' + c.category + ' (' + c.count + ')</span>' +
+                '</label>'
+            ).join('') + '</div>';
 
-            Plotly.newPlot('predictionChart', traces, layout, { responsive: true });
-        }
-
-        async function loadTrends(category = 'all') {
-            try {
-                const response = await fetch(`${API_URL}/api/predict/trends?category=${category}&timeframe=30d`);
-                const data = await response.json();
-
-                const container = document.getElementById('trendsContainer');
-                container.innerHTML = Object.entries(data.trends).map(([cat, trend]) => `
-                    <div class="border-l-4 ${trend.direction === 'increasing' ? 'border-red-500' : 'border-green-500'} pl-4 py-2">
-                        <div class="flex justify-between items-center">
-                            <span class="font-semibold text-gray-800">${cat}</span>
-                            <span class="text-sm ${trend.direction === 'increasing' ? 'text-red-600' : 'text-green-600'}">
-                                <i class="fas fa-arrow-${trend.direction === 'increasing' ? 'up' : 'down'}"></i>
-                                ${trend.magnitude_percent}%
-                            </span>
-                        </div>
-                        <div class="text-sm text-gray-600 mt-1">
-                            Predicted total: ${trend.predicted_total} | Daily avg: ${trend.daily_average}
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load trends:', error);
-            }
-        }
-
-        async function loadHotspots() {
-            try {
-                const response = await fetch(`${API_URL}/api/predict/hotspots?top_n=5`);
-                const data = await response.json();
-
-                const container = document.getElementById('hotspotsContainer');
-                container.innerHTML = data.hotspots.map((spot, idx) => `
-                    <div class="bg-gray-50 rounded-lg p-4">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-semibold">
-                                    #${idx + 1}
-                                </span>
-                                <h3 class="font-semibold text-gray-800 mt-2">${spot.neighborhood}</h3>
-                                <p class="text-sm text-gray-600">Predicted volume: ${spot.predicted_volume}</p>
-                            </div>
-                        </div>
-                        <div class="mt-2 flex flex-wrap gap-1">
-                            ${spot.top_categories.map(cat =>
-                                `<span class="text-xs bg-gray-200 px-2 py-1 rounded">${cat}</span>`
-                            ).join('')}
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load hotspots:', error);
-            }
-        }
-
-        // NEW: Historical Data Functions
-        async function loadHistoricalTrends() {
-            try {
-                // Get daily time series data
-                const response = await fetch(`${API_URL}/api/data/daily-timeseries`);
-                if (!response.ok) {
-                    throw new Error(`API returned ${response.status}`);
+        toggleContainer.querySelectorAll('input[data-map-cat]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const cat = cb.getAttribute('data-map-cat');
+                if (cb.checked) {
+                    leafletMap.addLayer(mapLayerGroups[cat]);
+                    cb.parentElement.classList.remove('opacity-40');
+                } else {
+                    leafletMap.removeLayer(mapLayerGroups[cat]);
+                    cb.parentElement.classList.add('opacity-40');
                 }
-                const data = await response.json();
-
-                if (!data.dates || !data.counts || data.dates.length === 0) {
-                    throw new Error('No time series data available');
+            });
+            cb.parentElement.addEventListener('click', (e) => {
+                if (e.target !== cb) {
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change'));
                 }
+            });
+        });
 
-                const trace = {
-                    x: data.dates,
-                    y: data.counts,
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    name: 'Daily Requests',
-                    line: { color: '#3b82f6', width: 3, shape: 'spline', smoothing: 1.3 },
-                    marker: { size: 7, color: '#3b82f6', line: { color: '#1e40af', width: 1 } },
-                    fill: 'tozeroy',
-                    fillcolor: 'rgba(59, 130, 246, 0.1)'
-                };
+        // Legend
+        const legend = L.control({ position: 'bottomright' });
+        legend.onAdd = function () {
+            const div = L.DomUtil.create('div', 'legend-panel');
+            div.innerHTML = '<h4>Categories</h4>' +
+                categories.map(c =>
+                    '<div class="legend-item"><span class="legend-dot" style="background:' + c.color + '"></span>' + c.category + '</div>'
+                ).join('');
+            return div;
+        };
+        legend.addTo(leafletMap);
 
-                const layout = {
-                    xaxis: {
-                        title: {
-                            text: 'Date',
-                            font: { size: 13, color: '#4B5563' }
-                        },
-                        gridcolor: '#F3F4F6',
-                        tickfont: { size: 11 }
-                    },
-                    yaxis: {
-                        title: {
-                            text: 'Number of Requests',
-                            font: { size: 13, color: '#4B5563' }
-                        },
-                        gridcolor: '#F3F4F6'
-                    },
-                    hovermode: 'x unified',
-                    showlegend: false,
-                    margin: { t: 20, r: 20, b: 60, l: 65 },
-                    height: 400,
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
+        // Fix map rendering after tab switch
+        setTimeout(() => leafletMap.invalidateSize(), 100);
+    }
 
-                Plotly.newPlot('historicalVolumeChart', [trace], layout, { responsive: true, displayModeBar: false });
-            } catch (error) {
-                console.error('Failed to load historical trends:', error);
-                document.getElementById('historicalVolumeChart').innerHTML =
-                    '<p class="text-red-600 p-4">Error loading trend data: ' + error.message + '</p>';
-            }
+    // ---- Insights Tab ----
+
+    async function loadInsights() {
+        const [insights, monthly] = await Promise.all([
+            apiFetch('/api/analytics/category-insights').catch(() => null),
+            apiFetch('/api/analytics/monthly-trends').catch(() => null),
+        ]);
+
+        // District Hotspots
+        if (insights && insights.district_hotspots && insights.district_hotspots.length > 0) {
+            const hotspots = insights.district_hotspots;
+            const traces = hotspots.map((h, i) => ({
+                y: [h.category],
+                x: [h.concentration],
+                type: 'bar',
+                orientation: 'h',
+                name: 'D' + h.district + ' (' + (DISTRICT_NAMES[h.district] || '') + ')',
+                marker: { color: MAP_CATEGORY_COLORS[i % MAP_CATEGORY_COLORS.length] },
+                text: [h.concentration + '%'],
+                textposition: 'outside',
+                textfont: { size: 11 },
+            }));
+            const layout = buildLayout({
+                margin: { t: 10, r: 60, b: 40, l: 180 },
+                barmode: 'group',
+                yaxis: { automargin: true, gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+                xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: '% Concentration', font: { size: 11 } } },
+                showlegend: true,
+                legend: { orientation: 'h', y: 1.12, x: 0.5, xanchor: 'center', font: { size: 11 } },
+            });
+            Plotly.newPlot('hotspotsChart', traces, layout, CHART_CONFIG);
+        } else {
+            showError('hotspotsChart');
         }
 
-        async function loadCategoryBreakdown() {
-            try {
-                const response = await fetch(`${API_URL}/api/data/stats`);
-                const data = await response.json();
+        // Recommendations
+        const recs = [
+            { title: 'Staff peak hours proactively', desc: 'Deploy 30% more field crews between 8-11 AM when request volume is highest.' },
+            { title: 'Focus on D6 encampments', desc: '33% of encampment requests concentrate in SOMA/Tenderloin. Station dedicated teams there.' },
+            { title: 'Reduce weekend crews', desc: 'Weekend volume drops significantly. Reallocate weekend staffing to weekday surge.' },
+            { title: 'Pre-position for rain events', desc: 'Sewer and flooding requests spike on rainy days. Monitor weather forecasts to deploy crews early.' },
+            { title: 'Graffiti team in D9', desc: '25% of graffiti reports come from Mission/Portola. Assign a dedicated crew to this district.' },
+        ];
+        document.getElementById('recommendations').innerHTML = recs.map(r =>
+            '<div class="bg-white border border-gray-200 rounded-lg p-4">' +
+            '<p class="text-sm font-semibold text-gray-900">' + r.title + '</p>' +
+            '<p class="text-xs text-gray-500 mt-1">' + r.desc + '</p>' +
+            '</div>'
+        ).join('');
 
-                // Get top 10 categories
-                const categories = Object.entries(data.top_categories || data.categories || {})
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10);
+        // Comparative summary
+        if (monthly && monthly.months && monthly.counts && monthly.counts.length >= 2) {
+            const len = monthly.counts.length;
+            const thisMonth = monthly.counts[len - 1];
+            const lastMonth = monthly.counts[len - 2];
+            const change = ((thisMonth - lastMonth) / lastMonth * 100).toFixed(1);
+            const direction = change >= 0 ? 'up' : 'down';
+            const arrow = change >= 0 ? '&#9650;' : '&#9660;';
+            const color = change >= 0 ? 'text-red-600' : 'text-green-600';
 
-                const trace = {
-                    x: categories.map(c => c[1]),
-                    y: categories.map(c => c[0]),
-                    type: 'bar',
-                    orientation: 'h',
-                    marker: { color: '#3b82f6' }
-                };
-
-                const layout = {
-                    xaxis: {
-                        title: {
-                            text: 'Number of Requests',
-                            font: { size: 13, color: '#4B5563' }
-                        },
-                        gridcolor: '#F3F4F6'
-                    },
-                    yaxis: {
-                        title: '',
-                        tickfont: { size: 12 },
-                        automargin: true
-                    },
-                    margin: { t: 20, r: 20, b: 60, l: 200 },
-                    height: 500,
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('categoriesChart', [trace], layout, { responsive: true, displayModeBar: false });
-            } catch (error) {
-                console.error('Failed to load category breakdown:', error);
-                document.getElementById('categoriesChart').innerHTML =
-                    '<p class="text-red-600 p-4">Error loading category data</p>';
-            }
+            document.getElementById('comparativeSummary').innerHTML =
+                '<div class="space-y-2">' +
+                '<p><span class="font-medium text-gray-900">This month (' + monthly.months[len - 1] + '):</span> ' + thisMonth.toLocaleString() + ' requests</p>' +
+                '<p><span class="font-medium text-gray-900">Last month (' + monthly.months[len - 2] + '):</span> ' + lastMonth.toLocaleString() + ' requests</p>' +
+                '<p class="' + color + ' font-medium">' + arrow + ' ' + Math.abs(change) + '% ' + direction + ' month-over-month</p>' +
+                '</div>';
+        } else {
+            document.getElementById('comparativeSummary').innerHTML =
+                '<p class="text-gray-400 text-center py-4">Not enough data for comparison</p>';
         }
+    }
 
-        async function loadRecentRequests() {
-            try {
-                const response = await fetch(`${API_URL}/api/data/recent?limit=20`);
-                const data = await response.json();
+    // ---- Date Range + Category Filter ----
 
-                const tbody = document.getElementById('recentRequestsTable');
-                tbody.innerHTML = data.data.map(req => {
-                    let districtDisplay = 'N/A';
-                    if (req.district !== null && req.district !== undefined) {
-                        const districtNum = Math.floor(req.district);
-                        const neighborhoodName = DISTRICT_NAMES[districtNum];
-                        districtDisplay = neighborhoodName ? `D${districtNum}: ${neighborhoodName}` : `D${districtNum}`;
+    function initFilters() {
+        document.getElementById('applyDateRange').addEventListener('click', () => {
+            tabDataLoaded.overview = false;
+            tabDataLoaded.trends = false;
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab) loadTabData(activeTab.getAttribute('data-tab'));
+        });
+
+        document.getElementById('globalCategoryFilter').addEventListener('change', async (e) => {
+            const cat = e.target.value;
+            if (cat) {
+                try {
+                    const data = await apiFetch('/api/analytics/category-timeseries?category=' + encodeURIComponent(cat));
+                    if (data && data.dates) {
+                        renderVolumeChart(data);
                     }
-                    return `
-                    <tr class="border-b hover:bg-gray-50">
-                        <td class="px-4 py-2 text-sm">${req.opened ? new Date(req.opened).toLocaleDateString() : 'N/A'}</td>
-                        <td class="px-4 py-2 text-sm">${req.category}</td>
-                        <td class="px-4 py-2 text-sm">${req.address || 'N/A'}</td>
-                        <td class="px-4 py-2 text-sm text-center">${districtDisplay}</td>
-                        <td class="px-4 py-2 text-sm">
-                            <span class="inline-block px-2 py-1 rounded text-xs ${
-                                req.status === 'Closed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                            }">
-                                ${req.status}
-                            </span>
-                        </td>
-                    </tr>
-                `}).join('');
-            } catch (error) {
-                console.error('Failed to load recent requests:', error);
-                document.getElementById('recentRequestsTable').innerHTML =
-                    '<tr><td colspan="5" class="text-center text-red-600 p-4">Error loading recent requests</td></tr>';
-            }
-        }
-
-        async function loadGeographicData() {
-            try {
-                const response = await fetch(`${API_URL}/api/data/recent?limit=1000`);
-                const data = await response.json();
-
-                // Group by district
-                const districtGroups = {};
-                data.data.forEach(req => {
-                    if (req.district !== null && req.district !== 'N/A' && req.district !== undefined) {
-                        const district = Math.floor(req.district).toString();
-                        districtGroups[district] = (districtGroups[district] || 0) + 1;
-                    }
-                });
-
-                const districts = Object.entries(districtGroups)
-                    .sort((a, b) => parseInt(b[1]) - parseInt(a[1])); // Sort by count descending
-
-                const trace = {
-                    y: districts.map(d => {
-                        const districtNum = d[0];
-                        const name = DISTRICT_NAMES[districtNum] || `District ${districtNum}`;
-                        return `D${districtNum}: ${name}`;
-                    }),
-                    x: districts.map(d => d[1]),
-                    type: 'bar',
-                    orientation: 'h',
-                    marker: {
-                        color: '#8b5cf6',
-                        line: { color: '#7c3aed', width: 1 }
-                    },
-                    text: districts.map(d => d[1]),
-                    textposition: 'outside',
-                    textfont: { size: 11, color: '#4B5563' }
-                };
-
-                const layout = {
-                    xaxis: {
-                        title: {
-                            text: 'Number of Requests',
-                            font: { size: 13, color: '#4B5563' }
-                        },
-                        gridcolor: '#F3F4F6'
-                    },
-                    yaxis: {
-                        title: '',
-                        tickfont: { size: 12 },
-                        automargin: true
-                    },
-                    margin: { t: 20, r: 60, b: 60, l: 200 },
-                    height: 500,
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('geographicChart', [trace], layout, { responsive: true, displayModeBar: false });
-            } catch (error) {
-                console.error('Failed to load geographic data:', error);
-                document.getElementById('geographicChart').innerHTML =
-                    '<p class="text-red-600 p-4">Error loading geographic data</p>';
-            }
-        }
-
-        async function loadMetrics() {
-            try {
-                const response = await fetch(`${API_URL}/api/data/stats`);
-                const data = await response.json();
-
-                // Update status cards with real data
-                const numCategories = Object.keys(data.categories || {}).length;
-                document.getElementById('categoriesCount').textContent = numCategories.toLocaleString();
-                document.getElementById('totalRequestsCount').textContent = (data.total_requests || 0).toLocaleString();
-                document.getElementById('dailyAvgCount').textContent = Math.round(data.daily_average || 0).toLocaleString();
-            } catch (error) {
-                console.error('Failed to load metrics:', error);
-            }
-        }
-
-        // Resource Planning & Trends Functions
-        async function loadDayOfWeekAnalytics() {
-            try {
-                const response = await fetch(`${API_URL}/api/analytics/day-of-week`);
-                const data = await response.json();
-
-                const trace = {
-                    x: data.days,
-                    y: data.counts,
-                    type: 'bar',
-                    marker: {
-                        color: '#6366f1',
-                        line: { color: '#4f46e5', width: 1 }
-                    },
-                    text: data.counts.map(c => c.toLocaleString()),
-                    textposition: 'outside',
-                    textfont: { size: 11 }
-                };
-
-                const layout = {
-                    xaxis: { title: { text: 'Day of Week', font: { size: 13 } } },
-                    yaxis: { title: { text: 'Total Requests', font: { size: 13 } }, gridcolor: '#F3F4F6' },
-                    margin: { t: 20, r: 20, b: 60, l: 65 },
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('dayOfWeekChart', [trace], layout, { responsive: true, displayModeBar: false });
-
-                // Generate insight
-                const maxDay = data.days[data.counts.indexOf(Math.max(...data.counts))];
-                const minDay = data.days[data.counts.indexOf(Math.min(...data.counts))];
-                const maxCount = Math.max(...data.counts);
-                const minCount = Math.min(...data.counts);
-                const diff = ((maxCount - minCount) / minCount * 100).toFixed(0);
-
-                document.getElementById('dayOfWeekInsightText').innerHTML =
-                    `<strong>${maxDay}</strong> has ${diff}% more requests than <strong>${minDay}</strong>. ` +
-                    `Staff ${diff}% more resources on Mon-Tue vs weekends for optimal coverage.`;
-            } catch (error) {
-                console.error('Failed to load day-of-week analytics:', error);
-            }
-        }
-
-        async function loadHourlyPattern() {
-            try {
-                const response = await fetch(`${API_URL}/api/analytics/hourly-pattern`);
-                const data = await response.json();
-
-                const trace = {
-                    x: data.hours.map(h => `${h}:00`),
-                    y: data.counts,
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    line: { color: '#f97316', width: 3, shape: 'spline' },
-                    marker: { size: 7, color: '#f97316' },
-                    fill: 'tozeroy',
-                    fillcolor: 'rgba(249, 115, 22, 0.1)'
-                };
-
-                const layout = {
-                    xaxis: { title: { text: 'Hour of Day', font: { size: 13 } } },
-                    yaxis: { title: { text: 'Average Requests', font: { size: 13 } }, gridcolor: '#F3F4F6' },
-                    margin: { t: 20, r: 20, b: 60, l: 65 },
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    annotations: [{
-                        x: `${data.peak_hour}:00`,
-                        y: data.peak_count,
-                        text: `Peak: ${data.peak_hour}:00`,
-                        showarrow: true,
-                        arrowhead: 2,
-                        ax: 0,
-                        ay: -40
-                    }],
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('hourlyPatternChart', [trace], layout, { responsive: true, displayModeBar: false });
-
-                // Generate insight
-                const totalRequests = data.counts.reduce((a, b) => a + b, 0);
-                const morning8to11 = data.counts.slice(8, 12).reduce((a, b) => a + b, 0);
-                const morningPct = (morning8to11 / totalRequests * 100).toFixed(0);
-
-                document.getElementById('hourlyInsightText').innerHTML =
-                    `<strong>${data.peak_hour}:00 is peak hour</strong> with ${data.peak_count.toLocaleString()} requests. ` +
-                    `Morning rush (8-11 AM) = <strong>${morningPct}% of daily volume</strong>. Schedule heavy staffing during these hours.`;
-            } catch (error) {
-                console.error('Failed to load hourly pattern:', error);
-            }
-        }
-
-        async function loadWeatherImpact() {
-            try {
-                const response = await fetch(`${API_URL}/api/analytics/weather-impact`);
-                const data = await response.json();
-
-                const categories = data.category_impacts.slice(0, 8).map(c => c.category);
-                const impacts = data.category_impacts.slice(0, 8).map(c => c.impact_percent);
-                const colors = impacts.map(i => i > 0 ? '#10b981' : '#ef4444');
-
-                const trace = {
-                    y: categories,
-                    x: impacts,
-                    type: 'bar',
-                    orientation: 'h',
-                    marker: { color: colors },
-                    text: impacts.map(i => `${i > 0 ? '+' : ''}${i}%`),
-                    textposition: 'outside',
-                    textfont: { size: 11 }
-                };
-
-                const layout = {
-                    xaxis: { title: { text: '% Change on Rainy Days', font: { size: 13 } }, gridcolor: '#F3F4F6', zeroline: true },
-                    yaxis: { title: '', tickfont: { size: 11 }, automargin: true },
-                    margin: { t: 40, r: 80, b: 60, l: 200 },
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    annotations: [{
-                        text: `Overall: ${data.overall_impact_percent}% on rainy days`,
-                        xref: 'paper',
-                        yref: 'paper',
-                        x: 0.5,
-                        y: 1.1,
-                        showarrow: false,
-                        font: { size: 12, color: '#4B5563' }
-                    }],
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('weatherImpactChart', [trace], layout, { responsive: true, displayModeBar: false });
-
-                // Generate insight
-                const biggestIncrease = data.category_impacts.filter(c => c.impact_percent > 0).sort((a, b) => b.impact_percent - a.impact_percent)[0];
-                const biggestDecrease = data.category_impacts.filter(c => c.impact_percent < 0).sort((a, b) => a.impact_percent - b.impact_percent)[0];
-
-                let insightText = `Overall, rainy days see <strong>${Math.abs(data.overall_impact_percent)}% ${data.overall_impact_percent < 0 ? 'fewer' : 'more'} requests</strong>. `;
-                if (biggestIncrease) {
-                    insightText += `<strong>${biggestIncrease.category}</strong> spikes ${biggestIncrease.impact_percent}% on rainy days. `;
+                } catch (err) {
+                    // Fallback: just reload overview
+                    tabDataLoaded.overview = false;
+                    loadTabData('overview');
                 }
-                if (biggestDecrease) {
-                    insightText += `Pre-position crews for rain-driven issues.`;
-                }
-
-                document.getElementById('weatherInsightText').innerHTML = insightText;
-            } catch (error) {
-                console.error('Failed to load weather impact:', error);
-                document.getElementById('weatherImpactChart').innerHTML =
-                    '<p class="text-gray-500 p-4">Weather data not available</p>';
+            } else {
+                tabDataLoaded.overview = false;
+                loadTabData('overview');
             }
-        }
+        });
 
-        async function loadMonthlyTrends() {
-            try {
-                const response = await fetch(`${API_URL}/api/analytics/monthly-trends`);
-                const data = await response.json();
+        document.getElementById('exportCsv').addEventListener('click', () => {
+            window.location.href = API_URL + '/api/data/export';
+        });
+    }
 
-                const trace = {
-                    x: data.months,
-                    y: data.counts,
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    line: { color: '#22c55e', width: 3, shape: 'spline' },
-                    marker: { size: 9, color: '#22c55e', line: { color: '#16a34a', width: 2 } },
-                    fill: 'tozeroy',
-                    fillcolor: 'rgba(34, 197, 94, 0.1)'
-                };
+    // ---- Init ----
 
-                const avgLine = {
-                    x: data.months,
-                    y: new Array(data.months.length).fill(data.average),
-                    type: 'scatter',
-                    mode: 'lines',
-                    line: { color: '#9ca3af', width: 2, dash: 'dash' },
-                    name: 'Average'
-                };
+    document.addEventListener('DOMContentLoaded', () => {
+        initTabs();
+        initFilters();
 
-                const layout = {
-                    xaxis: { title: { text: 'Month', font: { size: 13 } } },
-                    yaxis: { title: { text: 'Total Requests', font: { size: 13 } }, gridcolor: '#F3F4F6' },
-                    margin: { t: 20, r: 20, b: 60, l: 65 },
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    showlegend: false,
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('monthlyTrendsChart', [trace, avgLine], layout, { responsive: true, displayModeBar: false });
-
-                // Generate insight
-                const maxMonth = data.months[data.counts.indexOf(Math.max(...data.counts))];
-                const maxCount = Math.max(...data.counts);
-                const avgCount = data.average;
-                const spike = ((maxCount - avgCount) / avgCount * 100).toFixed(0);
-
-                document.getElementById('monthlyInsightText').innerHTML =
-                    `<strong>${maxMonth}</strong> showed a ${spike}% spike above average (${maxCount.toLocaleString()} vs ${avgCount.toLocaleString()}). ` +
-                    `Plan for ${spike}% extra capacity during winter months based on this seasonal pattern.`;
-            } catch (error) {
-                console.error('Failed to load monthly trends:', error);
-            }
-        }
-
-        async function loadCategoryGrowthTrends() {
-            try {
-                const response = await fetch(`${API_URL}/api/analytics/category-insights`);
-                const data = await response.json();
-
-                const categories = data.category_growth_trends.map(c => c.category);
-                const growths = data.category_growth_trends.map(c => c.growth_pct);
-                const colors = growths.map(g => g < 0 ? '#22c55e' : '#ef4444');
-
-                const trace = {
-                    y: categories,
-                    x: growths,
-                    type: 'bar',
-                    orientation: 'h',
-                    marker: { color: colors },
-                    text: growths.map(g => `${g > 0 ? '+' : ''}${g}%`),
-                    textposition: 'outside',
-                    textfont: { size: 11 }
-                };
-
-                const layout = {
-                    xaxis: {
-                        title: { text: 'Growth % (Last 8 Months)', font: { size: 13 } },
-                        gridcolor: '#F3F4F6',
-                        zeroline: true,
-                        zerolinecolor: '#9ca3af',
-                        zerolinewidth: 2
-                    },
-                    yaxis: { title: '', tickfont: { size: 11 }, automargin: true },
-                    margin: { t: 40, r: 80, b: 60, l: 220 },
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('categoryGrowthChart', [trace], layout, { responsive: true, displayModeBar: false });
-
-                // Generate insight
-                const declining = data.category_growth_trends.filter(c => c.trend === 'DECLINING');
-                const mostDeclined = declining[0];
-
-                let insightText = `<strong>${declining.length} categories are declining</strong>, led by <strong>${mostDeclined.category}</strong> (${mostDeclined.growth_pct}%). `;
-                insightText += `Plan to <strong>reallocate ${Math.abs(mostDeclined.growth_pct)}% of crews</strong> from ${mostDeclined.category} to growing categories.`;
-
-                document.getElementById('categoryGrowthInsightText').innerHTML = insightText;
-
-                // Load actionable recommendations
-                loadActionableRecommendations(data);
-
-            } catch (error) {
-                console.error('Failed to load category growth trends:', error);
-                document.getElementById('categoryGrowthChart').innerHTML =
-                    '<p class="text-gray-500 p-4">Category insights not available</p>';
-            }
-        }
-
-        async function loadDistrictHotspots() {
-            try {
-                const response = await fetch(`${API_URL}/api/analytics/category-insights`);
-                const data = await response.json();
-
-                const traces = data.district_hotspots.map((hotspot, idx) => ({
-                    y: [hotspot.category],
-                    x: [hotspot.concentration],
-                    type: 'bar',
-                    orientation: 'h',
-                    name: `District ${hotspot.district} (${DISTRICT_NAMES[hotspot.district]})`,
-                    marker: { color: ['#ef4444', '#f59e0b'][idx] },
-                    text: [`${hotspot.concentration}%`],
-                    textposition: 'outside',
-                    textfont: { size: 11 }
-                }));
-
-                const layout = {
-                    xaxis: {
-                        title: { text: '% of Category in District', font: { size: 13 } },
-                        gridcolor: '#F3F4F6',
-                        range: [0, 40]
-                    },
-                    yaxis: { title: '', tickfont: { size: 11 }, automargin: true },
-                    margin: { t: 40, r: 80, b: 60, l: 200 },
-                    paper_bgcolor: '#FFFFFF',
-                    plot_bgcolor: '#FAFAFA',
-                    barmode: 'group',
-                    showlegend: true,
-                    legend: { orientation: 'h', y: 1.15, x: 0.5, xanchor: 'center' },
-                    font: { family: 'Inter, system-ui, sans-serif' }
-                };
-
-                Plotly.newPlot('districtHotspotsChart', traces, layout, { responsive: true, displayModeBar: false });
-
-                // Generate insight
-                const hotspot1 = data.district_hotspots[0];
-                const hotspot2 = data.district_hotspots[1];
-
-                let insightText = `<strong>${hotspot1.concentration}% of ${hotspot1.category}</strong> occur in District ${hotspot1.district} (${DISTRICT_NAMES[hotspot1.district]}). `;
-                insightText += `<strong>${hotspot2.concentration}% of ${hotspot2.category}</strong> occur in District ${hotspot2.district} (${DISTRICT_NAMES[hotspot2.district]}). `;
-                insightText += `Station specialized crews in these districts for faster response times.`;
-
-                document.getElementById('districtHotspotsInsightText').innerHTML = insightText;
-
-            } catch (error) {
-                console.error('Failed to load district hotspots:', error);
-                document.getElementById('districtHotspotsChart').innerHTML =
-                    '<p class="text-gray-500 p-4">District hotspot data not available</p>';
-            }
-        }
-
-        function loadActionableRecommendations(data) {
-            const recommendations = [
-                {
-                    icon: 'clock',
-                    color: 'blue',
-                    text: 'Parking Enforcement peaks at 9:00 → Deploy officers 1 hour before rush hour'
-                },
-                {
-                    icon: 'map-marker-alt',
-                    color: 'red',
-                    text: `Graffiti concentrated in District 9 (${DISTRICT_NAMES[9]}) → Station cleanup crews in D9`
-                },
-                {
-                    icon: 'calendar-week',
-                    color: 'green',
-                    text: 'Street Cleaning 3.0x higher on weekdays → Reduce weekend crews 67%'
-                },
-                {
-                    icon: 'cloud-rain',
-                    color: 'indigo',
-                    text: 'Sewer issues 2.4x higher on rainy days → Pre-position crews when rain forecasted'
-                },
-                {
-                    icon: 'volume-up',
-                    color: 'yellow',
-                    text: 'Noise complaints 40% after 6pm, peak at 23:00 → Staff hotline until midnight'
-                }
-            ];
-
-            const html = recommendations.map(rec => `
-                <div class="flex items-start space-x-3 p-3 bg-white rounded border border-gray-200">
-                    <i class="fas fa-${rec.icon} text-${rec.color}-600 text-lg mt-1"></i>
-                    <p class="text-gray-700 text-sm flex-1">${rec.text}</p>
-                </div>
-            `).join('');
-
-            document.getElementById('actionableRecommendations').innerHTML = html;
-        }
+        // Load default tab
+        const hash = window.location.hash.replace('#', '');
+        const activeTab = ['overview', 'trends', 'map', 'insights'].includes(hash) ? hash : 'overview';
+        loadTabData(activeTab);
+    });
     </script>
 </body>
 </html>
