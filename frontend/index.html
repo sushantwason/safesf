@@ -3,59 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SF 311 Dashboard</title>
+    <title>San Francisco Insights</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <!-- Leaflet loaded lazily when Map tab is opened (see loadMapScripts()) -->
     <style>
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-        .tab-btn.active { color: #2563eb; border-bottom: 2px solid #2563eb; }
-        .tab-btn { border-bottom: 2px solid transparent; }
-        #mapContainer { height: calc(100vh - 160px); min-height: 500px; }
+        :root {
+            --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+            --surface: #f1f5f9;
+            --card: #ffffff;
+            --card-border: #e2e8f0;
+            --radius: 12px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.06);
+            --shadow-lg: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+        }
+        body { font-family: var(--font-sans); background: var(--surface); }
+        .tab-btn.active { color: #fff; background: rgba(255,255,255,0.15); border-radius: 8px; }
+        .tab-btn { padding: 6px 12px; border-radius: 8px; transition: color .15s, background .15s; }
+        .card-premium { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); box-shadow: var(--shadow); }
+        #mapContainer { height: calc(100vh - 160px); min-height: 500px; border-radius: var(--radius); overflow: hidden; }
         .leaflet-container { background: #f8fafc; }
-        .legend-panel { background: white; padding: 10px 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); max-height: 300px; overflow-y: auto; }
-        .legend-panel h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #374151; }
-        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #4b5563; padding: 2px 0; }
+        .legend-panel { background: var(--card); padding: 12px 16px; border-radius: var(--radius); box-shadow: var(--shadow-lg); border: 1px solid var(--card-border); max-height: 300px; overflow-y: auto; }
+        .legend-panel h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #334155; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; padding: 2px 0; }
         .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .logo-wrap { display: flex; align-items: center; gap: 10px; }
+        .logo-bridge { width: 36px; height: 28px; flex-shrink: 0; }
     </style>
 </head>
-<body class="bg-gray-50 antialiased">
-    <!-- Fixed Top Navigation -->
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 h-14">
+<body class="antialiased">
+    <!-- Fixed Top Navigation (premium dark) -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-slate-900 border-b border-slate-700/50 h-14">
         <div class="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-            <div class="font-bold text-lg text-gray-900 tracking-tight">SF 311</div>
+            <div class="logo-wrap">
+                <svg class="logo-bridge" viewBox="0 0 48 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <!-- Golden Gate Bridge: towers + suspension arc -->
+                    <rect x="8" y="8" width="3" height="14" rx="1" fill="#fbbf24"/>
+                    <rect x="37" y="8" width="3" height="14" rx="1" fill="#fbbf24"/>
+                    <path d="M11 10 Q24 2 37 10" stroke="#fbbf24" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+                    <path d="M0 24 L48 24 L48 28 L0 28 Z" fill="#334155"/>
+                </svg>
+                <span class="font-bold text-lg text-white tracking-tight">San Francisco Insights</span>
+            </div>
             <div class="flex items-center gap-1">
-                <button class="tab-btn active px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="overview">Overview</button>
-                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="trends">Trends</button>
-                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="map">Map</button>
-                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="insights">Insights</button>
-                <button class="tab-btn px-3 py-1 text-sm font-medium text-gray-500 hover:text-gray-900 transition" data-tab="compare">Compare</button>
+                <button class="tab-btn active px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white transition" data-tab="overview">Overview</button>
+                <button class="tab-btn px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white transition" data-tab="trends">Trends</button>
+                <button class="tab-btn px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white transition" data-tab="map">Map</button>
+                <button class="tab-btn px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white transition" data-tab="insights">Insights</button>
+                <button class="tab-btn px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white transition" data-tab="compare">Compare</button>
             </div>
             <div class="flex items-center gap-2">
-                <input type="date" id="startDate" class="text-xs border border-gray-300 rounded px-2 py-1">
-                <span class="text-gray-400 text-xs">to</span>
-                <input type="date" id="endDate" class="text-xs border border-gray-300 rounded px-2 py-1">
-                <button id="applyDateRange" class="text-xs bg-blue-600 text-white px-3 py-1 rounded font-medium hover:bg-blue-700 transition">Apply</button>
+                <input type="date" id="startDate" class="text-xs bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-slate-200">
+                <span class="text-slate-500 text-xs">to</span>
+                <input type="date" id="endDate" class="text-xs bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-slate-200">
+                <button id="applyDateRange" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-3 py-1.5 rounded-lg font-medium transition">Apply</button>
             </div>
         </div>
     </nav>
 
-    <!-- Category + District Filter Bar (drill-down) -->
-    <div class="fixed top-14 left-0 right-0 z-40 bg-gray-50 border-b border-gray-200 h-10">
+    <!-- Category + District Filter Bar -->
+    <div class="fixed top-14 left-0 right-0 z-40 bg-slate-800/95 border-b border-slate-700/50 h-11">
         <div class="max-w-7xl mx-auto px-4 h-full flex items-center gap-4">
-            <label class="text-xs text-gray-500 font-medium">Category:</label>
-            <select id="globalCategoryFilter" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
+            <label class="text-xs text-slate-400 font-medium">Category:</label>
+            <select id="globalCategoryFilter" class="text-xs bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5 text-slate-200">
                 <option value="">All Categories</option>
             </select>
-            <label class="text-xs text-gray-500 font-medium ml-2">District:</label>
-            <select id="globalDistrictFilter" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
+            <label class="text-xs text-slate-400 font-medium ml-2">District:</label>
+            <select id="globalDistrictFilter" class="text-xs bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5 text-slate-200">
                 <option value="">All Districts</option>
                 <option value="1">D1 Richmond</option>
                 <option value="2">D2 Marina, Cow Hollow</option>
@@ -69,7 +86,7 @@
                 <option value="10">D10 Potrero, Bayview</option>
                 <option value="11">D11 Excelsior, Outer Mission</option>
             </select>
-            <button id="clearDrillDown" class="text-xs text-blue-600 hover:text-blue-800 font-medium hidden">Clear filters</button>
+            <button id="clearDrillDown" class="text-xs text-sky-400 hover:text-sky-300 font-medium hidden">Clear filters</button>
         </div>
     </div>
 
@@ -80,22 +97,22 @@
         <div data-tab-content="overview">
             <!-- KPI Cards -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Open Requests</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1" id="kpiOpen">--</p>
+                <div class="card-premium p-6">
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Open Requests</p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpiOpen">--</p>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Avg Resolution</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1" id="kpiResolution">-- hrs</p>
+                <div class="card-premium p-6">
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Avg Resolution</p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpiResolution">-- hrs</p>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Anomalies This Week</p>
+                <div class="card-premium p-6">
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Anomalies This Week</p>
                     <p class="text-2xl font-bold mt-1" id="kpiAnomalies">--</p>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Busiest District</p>
-                    <p class="text-2xl font-bold text-gray-900 mt-1" id="kpiBusiest">--</p>
-                    <p class="text-xs text-gray-400 mt-0.5" id="kpiBusiestCount"></p>
+                <div class="card-premium p-6">
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">Busiest District</p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" id="kpiBusiest">--</p>
+                    <p class="text-xs text-slate-500 mt-0.5" id="kpiBusiestCount"></p>
                 </div>
             </div>
 
@@ -108,26 +125,41 @@
             </div>
 
             <!-- Volume Over Time -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-                <h3 class="text-sm font-semibold text-gray-900 mb-4">Request Volume Over Time</h3>
+            <div class="card-premium p-6 mb-6">
+                <h3 class="text-sm font-semibold text-slate-900 mb-4">Request Volume Over Time</h3>
                 <div id="volumeChart" style="height:320px;"></div>
+            </div>
+
+            <!-- Resolution insights: by category (slowest vs fastest) + by hour opened -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card-premium p-6">
+                    <h3 class="text-sm font-semibold text-slate-900 mb-1">Resolution time by request type</h3>
+                    <p class="text-xs text-slate-500 mb-4">Avg hours to close by category · slowest vs fastest</p>
+                    <div id="resolutionByCategoryChart" style="height:280px;"></div>
+                    <div id="resolutionSlowestFastest" class="text-xs text-slate-600 mt-3 space-y-1"></div>
+                </div>
+                <div class="card-premium p-6">
+                    <h3 class="text-sm font-semibold text-slate-900 mb-1">Resolution time by time of request</h3>
+                    <p class="text-xs text-slate-500 mb-4">Avg hours to close by hour when request was opened</p>
+                    <div id="resolutionByHourChart" style="height:280px;"></div>
+                </div>
             </div>
 
             <!-- Two Column: Categories + Districts -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h3 class="text-sm font-semibold text-gray-900 mb-4">Top Request Categories</h3>
+                <div class="card-premium p-6">
+                    <h3 class="text-sm font-semibold text-slate-900 mb-4">Top Request Categories</h3>
                     <div id="categoriesChart" style="height:380px;"></div>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h3 class="text-sm font-semibold text-gray-900 mb-4">Requests by District</h3>
+                <div class="card-premium p-6">
+                    <h3 class="text-sm font-semibold text-slate-900 mb-4">Requests by District</h3>
                     <div id="districtChart" style="height:380px;"></div>
                 </div>
             </div>
 
             <!-- Recent Activity Table -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <h3 class="text-sm font-semibold text-gray-900 mb-4">Recent Activity</h3>
+            <div class="card-premium p-6">
+                <h3 class="text-sm font-semibold text-slate-900 mb-4">Recent Activity</h3>
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-sm">
                         <thead>
@@ -151,12 +183,12 @@
         <div data-tab-content="trends" class="hidden">
             <!-- Day of Week + Hourly -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="card-premium p-6">
                     <h3 class="text-sm font-semibold text-gray-900 mb-4">Day of Week Pattern</h3>
                     <div id="dowChart" style="height:300px;"></div>
                     <p class="text-xs text-gray-500 mt-3" id="dowInsight"></p>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="card-premium p-6">
                     <h3 class="text-sm font-semibold text-gray-900 mb-4">Hourly Pattern</h3>
                     <div id="hourlyChart" style="height:300px;"></div>
                     <p class="text-xs text-gray-500 mt-3" id="hourlyInsight"></p>
@@ -164,21 +196,21 @@
             </div>
 
             <!-- Monthly Trends -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="card-premium p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">Monthly Trends &amp; Seasonality</h3>
                 <div id="monthlyChart" style="height:320px;"></div>
                 <p class="text-xs text-gray-500 mt-3" id="monthlyInsight"></p>
             </div>
 
             <!-- Category Growth -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="card-premium p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">Category Growth Trends</h3>
                 <div id="growthChart" style="height:360px;"></div>
                 <p class="text-xs text-gray-500 mt-3" id="growthInsight"></p>
             </div>
 
             <!-- Resolution Time Analysis -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="card-premium p-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">Resolution Time Analysis</h3>
                 <div id="resolutionChart" style="height:360px;"></div>
             </div>
@@ -187,15 +219,17 @@
         <!-- Tab: Map -->
         <div data-tab-content="map" class="hidden">
             <div class="mb-3" id="mapCategoryToggles"></div>
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div id="mapContainer"></div>
+            <div class="card-premium overflow-hidden relative">
+                <div id="mapContainer">
+                    <div id="mapLoading" class="absolute inset-0 flex items-center justify-center bg-slate-50 z-[400] text-slate-500 text-sm">Loading map…</div>
+                </div>
             </div>
         </div>
 
         <!-- Tab: Insights -->
         <div data-tab-content="insights" class="hidden">
             <!-- Event Correlation (DataSF) -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="card-premium p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">311 Volume vs City Events (DataSF)</h3>
                 <p class="text-xs text-gray-500 mb-3">Correlates request volume with Our415 events and street closures</p>
                 <div id="eventCorrelation" class="text-sm text-gray-600">
@@ -204,13 +238,13 @@
             </div>
 
             <!-- District Hotspots -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="card-premium p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">District Hotspots by Category</h3>
                 <div id="hotspotsChart" style="height:300px;"></div>
             </div>
 
             <!-- Actionable Recommendations -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="card-premium p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">Top Actionable Recommendations</h3>
                 <div id="recommendations" class="space-y-3">
                     <p class="text-gray-400 text-sm py-4 text-center">Loading...</p>
@@ -218,7 +252,7 @@
             </div>
 
             <!-- Comparative Period Summary -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="card-premium p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">Comparative Period Summary</h3>
                 <div id="comparativeSummary" class="text-sm text-gray-600">
                     <p class="text-gray-400 text-center py-4">Loading...</p>
@@ -226,7 +260,7 @@
             </div>
 
             <!-- Compare Periods (this month vs same month last year) -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="card-premium p-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">Compare Periods</h3>
                 <p class="text-xs text-gray-500 mb-3">Compare this month to the same month last year</p>
                 <div id="comparePeriodsResult" class="text-sm text-gray-600">
@@ -238,16 +272,16 @@
 
     <!-- Tab: Compare (311 vs events / crime) -->
         <div data-tab-content="compare" class="hidden">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="card-premium p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-2">Compare 311 with another dataset</h3>
                 <p class="text-xs text-gray-500 mb-4">See how 311 request volume correlates with events (Our415, street closures, construction) or SFPD incident reports.</p>
                 <div class="flex items-center gap-4 mb-4">
                     <label class="text-xs font-medium text-gray-600">Secondary dataset:</label>
-                    <select id="compareDataset" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
+                    <select id="compareDataset" class="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white">
                         <option value="events">Events (Our415, closures, permits)</option>
                         <option value="crime">SFPD incidents (crime)</option>
                     </select>
-                    <button id="runCompare" class="text-xs bg-blue-600 text-white px-3 py-1 rounded font-medium hover:bg-blue-700 transition">Update</button>
+                    <button id="runCompare" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg font-medium transition">Update</button>
                 </div>
                 <div id="compareResult" class="text-sm text-gray-700 min-h-[120px]">
                     <p class="text-gray-400">Click Update to load correlation.</p>
@@ -256,12 +290,12 @@
         </div>
 
     <!-- Footer -->
-    <footer class="border-t border-gray-200 bg-white">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <p class="text-xs text-gray-400" id="dataFreshness">SF 311 Data &middot; data.sfgov.org</p>
+    <footer class="border-t border-slate-200 bg-white mt-8">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+            <p class="text-xs text-slate-500" id="dataFreshness">SF 311 Data &middot; data.sfgov.org</p>
             <div class="flex items-center gap-4">
-                <button id="exportCsv" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Export CSV</button>
-                <a href="/docs" class="text-xs text-gray-400 hover:text-gray-600">API Docs</a>
+                <button id="exportCsv" class="text-xs text-slate-600 hover:text-slate-900 font-medium">Export CSV</button>
+                <a href="/docs" class="text-xs text-slate-500 hover:text-slate-700">API Docs</a>
             </div>
         </div>
     </footer>
@@ -280,7 +314,7 @@
     const CHART_LAYOUT_BASE = {
         paper_bgcolor: '#FFFFFF',
         plot_bgcolor: '#FFFFFF',
-        font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#374151' },
+        font: { family: "'Plus Jakarta Sans', system-ui, sans-serif", size: 12, color: '#334155' },
         margin: { t: 10, r: 20, b: 50, l: 60 },
         xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
         yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
@@ -297,6 +331,8 @@
     let categoriesList = [];
     let tabDataLoaded = { overview: false, trends: false, map: false, insights: false };
     let leafletMap = null;
+    let mapScriptsLoaded = false;
+    let mapScriptsPromise = null;
     let mapLayerGroups = {};
     let mapData = null;
     let mapMarkerClusters = {};
@@ -378,7 +414,7 @@
     // ---- Overview Tab ----
 
     async function loadOverview() {
-        const [health, categories, stats, timeseries, districtData, recent, resolution, anomaliesData] = await Promise.all([
+        const [health, categories, stats, timeseries, districtData, recent, resolution, resolutionByHour, anomaliesData] = await Promise.all([
             apiFetch('/health').catch(() => null),
             apiFetch('/api/categories').catch(() => null),
             apiFetch('/api/data/stats').catch(() => null),
@@ -386,6 +422,7 @@
             apiFetch('/api/analytics/district-breakdown').catch(() => null),
             apiFetch('/api/data/recent?limit=10').catch(() => null),
             apiFetch('/api/analytics/resolution-time').catch(() => null),
+            apiFetch('/api/analytics/resolution-by-hour-opened').catch(() => null),
             apiFetch('/api/analytics/anomalies').catch(() => null),
         ]);
 
@@ -462,6 +499,20 @@
             document.getElementById('kpiBusiestCount').textContent = top.count.toLocaleString() + ' requests';
         } else {
             showError('districtChart');
+        }
+
+        // Resolution by category (slowest vs fastest) + by hour opened
+        if (resolution && resolution.categories && resolution.categories.length > 0) {
+            renderResolutionByCategory(resolution);
+        } else {
+            const el = document.getElementById('resolutionSlowestFastest');
+            if (el) el.innerHTML = '<p class="text-slate-400">No resolution data</p>';
+        }
+        if (resolutionByHour && resolutionByHour.by_hour && resolutionByHour.by_hour.length > 0) {
+            renderResolutionByHour(resolutionByHour.by_hour);
+        } else {
+            const hourEl = document.getElementById('resolutionByHourChart');
+            if (hourEl) hourEl.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400 text-sm">No resolution-by-hour data</div>';
         }
 
         // Recent table
@@ -598,6 +649,57 @@
                 }
             }
         });
+    }
+
+    function renderResolutionByCategory(resolution) {
+        const cats = resolution.categories || [];
+        if (cats.length === 0) return;
+        const sorted = [...cats].sort((a, b) => b.avg_hours - a.avg_hours);
+        const colors = sorted.map((c, i) => {
+            const pct = i / Math.max(1, sorted.length - 1);
+            return pct > 0.7 ? '#dc2626' : pct > 0.3 ? '#d97706' : '#16a34a';
+        });
+        const trace = {
+            y: sorted.map(c => c.category),
+            x: sorted.map(c => c.avg_hours),
+            type: 'bar',
+            orientation: 'h',
+            marker: { color: colors },
+            text: sorted.map(c => Math.round(c.avg_hours) + 'h'),
+            textposition: 'outside',
+            textfont: { size: 10 },
+        };
+        const layout = buildLayout({
+            margin: { t: 10, r: 45, b: 40, l: 160 },
+            yaxis: { automargin: true, gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
+            xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Avg hours to close', font: { size: 11 } } },
+        });
+        Plotly.newPlot('resolutionByCategoryChart', [trace], layout, CHART_CONFIG);
+        const slowest = sorted.slice(0, 3).map(c => c.category + ' (' + Math.round(c.avg_hours) + 'h)').join(', ');
+        const fastest = sorted.slice(-3).reverse().map(c => c.category + ' (' + Math.round(c.avg_hours) + 'h)').join(', ');
+        const el = document.getElementById('resolutionSlowestFastest');
+        if (el) el.innerHTML = '<p><span class="font-medium text-slate-700">Slowest to close:</span> ' + slowest + '</p><p><span class="font-medium text-slate-700">Fastest to close:</span> ' + fastest + '</p>';
+    }
+
+    function renderResolutionByHour(byHour) {
+        const sorted = byHour.sort((a, b) => a.hour - b.hour);
+        const hours = sorted.map(r => r.hour + ':00');
+        const avgH = sorted.map(r => r.avg_hours);
+        const trace = {
+            x: hours,
+            y: avgH,
+            type: 'bar',
+            marker: { color: '#0f172a' },
+            text: avgH.map(h => Math.round(h) + 'h'),
+            textposition: 'outside',
+            textfont: { size: 9 },
+        };
+        const layout = buildLayout({
+            margin: { t: 10, r: 20, b: 50, l: 50 },
+            xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', tickangle: -45 },
+            yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Avg hours to close', font: { size: 11 } } },
+        });
+        Plotly.newPlot('resolutionByHourChart', [trace], layout, CHART_CONFIG);
     }
 
     function renderRecentTable(data) {
@@ -775,7 +877,45 @@
         }
     }
 
-    // ---- Map Tab ----
+    // ---- Map Tab (lazy-load Leaflet for faster initial page load) ----
+
+    function loadMapScripts() {
+        if (mapScriptsLoaded) return Promise.resolve();
+        if (mapScriptsPromise) return mapScriptsPromise;
+        mapScriptsPromise = new Promise((resolve, reject) => {
+            const base = 'https://unpkg.com';
+            const links = [
+                base + '/leaflet@1.9.4/dist/leaflet.css',
+                base + '/leaflet.markercluster@1.4.1/dist/MarkerCluster.css',
+                base + '/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css',
+            ];
+            const scripts = [
+                base + '/leaflet@1.9.4/dist/leaflet.js',
+                base + '/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js',
+            ];
+            let loaded = 0;
+            const total = links.length + scripts.length;
+            function checkDone() {
+                if (++loaded === total) { mapScriptsLoaded = true; resolve(); }
+            }
+            links.forEach(href => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = href;
+                link.onload = checkDone;
+                link.onerror = () => checkDone();
+                document.head.appendChild(link);
+            });
+            scripts.forEach(src => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = checkDone;
+                script.onerror = () => reject(new Error('Map scripts failed to load'));
+                document.body.appendChild(script);
+            });
+        });
+        return mapScriptsPromise;
+    }
 
     function getMapApiParams() {
         const s = document.getElementById('startDate').value;
@@ -791,6 +931,9 @@
     }
 
     async function loadMap() {
+        await loadMapScripts();
+        const loadingEl = document.getElementById('mapLoading');
+        if (loadingEl) loadingEl.remove();
         // Initialize or reuse map
         if (!leafletMap) {
             leafletMap = L.map('mapContainer', { zoomControl: true }).setView([37.7749, -122.4194], 12);
@@ -812,7 +955,7 @@
             const data = await apiFetch('/api/analytics/map-data' + params);
             mapData = data;
             if (!data || !data.categories || data.categories.length === 0) {
-                showMapEmpty();
+                showMapEmpty(data && data.message ? data.message : null);
                 return;
             }
             renderMapCategories(data.categories, data.format === 'heatmap');
@@ -821,12 +964,15 @@
         }
     }
 
-    function showMapEmpty() {
+    function showMapEmpty(hint) {
         const container = document.getElementById('mapContainer');
         const overlay = document.createElement('div');
         overlay.className = 'absolute inset-0 flex items-center justify-center z-[1000] pointer-events-none';
-        overlay.innerHTML = '<div class="bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-4 text-center">' +
-            '<p class="text-gray-500 text-sm">No geographic data available</p></div>';
+        let msg = 'No geographic data available.';
+        if (hint) msg += ' ' + hint;
+        else msg += ' Run build_aggregates.py to generate grid_agg and recent_raw with coordinates, then redeploy.';
+        overlay.innerHTML = '<div class="card-premium px-6 py-4 text-center max-w-md">' +
+            '<p class="text-slate-600 text-sm">' + msg + '</p></div>';
         container.style.position = 'relative';
         container.appendChild(overlay);
     }
@@ -889,7 +1035,7 @@
         const toggleContainer = document.getElementById('mapCategoryToggles');
         toggleContainer.innerHTML = '<div class="flex flex-wrap gap-2">' +
             categories.map(c =>
-                '<label class="inline-flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-3 py-1 cursor-pointer hover:bg-gray-50">' +
+                '<label class="inline-flex items-center gap-1.5 text-xs bg-white border border-slate-200 rounded-full px-3 py-1 cursor-pointer hover:bg-slate-50">' +
                 '<input type="checkbox" checked class="sr-only" data-map-cat="' + c.category + '">' +
                 '<span class="w-2.5 h-2.5 rounded-full inline-block" style="background:' + c.color + '"></span>' +
                 '<span class="text-gray-700">' + c.category + ' (' + c.count + ')</span>' +
@@ -1026,7 +1172,7 @@
             { title: 'Graffiti team in D9', desc: '25% of graffiti reports come from Mission/Portola. Assign a dedicated crew to this district.' },
         ];
         document.getElementById('recommendations').innerHTML = recs.map(r =>
-            '<div class="bg-white border border-gray-200 rounded-lg p-4">' +
+            '<div class="card-premium p-4">' +
             '<p class="text-sm font-semibold text-gray-900">' + r.title + '</p>' +
             '<p class="text-xs text-gray-500 mt-1">' + r.desc + '</p>' +
             '</div>'

@@ -72,14 +72,12 @@ echo "⏰ Setting up daily data sync (Cloud Scheduler)..."
 if gcloud scheduler jobs describe sf-311-daily-sync --location "${REGION}" &>/dev/null; then
     echo "  Scheduler job sf-311-daily-sync already exists; skipping."
 else
-    # Use --no-oidc-token so we don't require App Engine SA (project may not have one).
-    # Your Cloud Run service allows unauthenticated, so the POST will succeed.
+    # No OIDC/OAuth flags = unauthenticated POST (Cloud Run allows unauthenticated).
     gcloud scheduler jobs create http sf-311-daily-sync \
         --location "${REGION}" \
         --schedule "0 6 * * *" \
         --uri "${SERVICE_URL}/api/sync" \
         --http-method POST \
-        --no-oidc-token \
         --time-zone "America/Los_Angeles" \
         && echo "  Created sf-311-daily-sync." \
         || echo "⚠️  Scheduler creation failed (e.g. API or location). Create manually in Console if needed."

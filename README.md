@@ -106,6 +106,24 @@ cd frontend
 python -m http.server 3000
 ```
 
+### Deploy with crime/weather data (Compare tab & rain annotations)
+
+The app reads `data/aggregates/crime_agg.parquet` and `weather_agg.parquet` if present. To include them in the deployed image:
+
+```bash
+# Fetch crime + weather into data/aggregates/
+./scripts/prepare_data_for_deploy.sh
+
+# Then deploy (build copies data/aggregates/ into the image)
+./scripts/deploy.sh
+```
+
+Or manually: `python scripts/fetch_crime.py --days 365`, then `python scripts/fetch_weather.py --days 365`, then deploy.
+
+### Custom domain (safesf.app)
+
+To serve the app at **https://safesf.app** instead of the default `*.run.app` URL, see **[docs/CUSTOM_DOMAIN.md](docs/CUSTOM_DOMAIN.md)** for buying the domain, mapping it in Cloud Run, and setting DNS.
+
 ### Deployment
 
 ```bash

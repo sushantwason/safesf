@@ -1105,7 +1105,13 @@ async def get_correlation(
     df["date"] = pd.to_datetime(df["opened"]).dt.date
     daily_311 = df.groupby("date").size().reset_index(name="total_requests")
 
-    if dataset == "crime" and AGGREGATES_CACHE and "crime_agg" in AGGREGATES_CACHE:
+    if dataset == "crime":
+        if not AGGREGATES_CACHE or "crime_agg" not in AGGREGATES_CACHE:
+            return {
+                "dataset": "crime",
+                "message": "Crime data not loaded. Run: python scripts/fetch_crime.py --days 365 and redeploy, or upload crime_agg.parquet to data/aggregates.",
+                "correlation": None,
+            }
         crime_df = AGGREGATES_CACHE["crime_agg"].copy()
         crime_df["date"] = pd.to_datetime(crime_df["date"], errors="coerce").dt.date
         if "district" in crime_df.columns and crime_df["district"].notna().any():
@@ -1114,7 +1120,7 @@ async def get_correlation(
             crime_daily = crime_df.groupby("date")["count"].sum().reset_index(name="incident_count")
         merged = daily_311.merge(crime_daily, on="date", how="inner")
         if merged.empty or len(merged) < 2:
-            return {"message": "Insufficient crime/311 overlap", "correlation": None, "dataset": "crime"}
+            return {"dataset": "crime", "message": "Insufficient crime/311 overlap", "correlation": None}
         corr = float(merged["total_requests"].corr(merged["incident_count"]))
         return {
             "dataset": "crime",
@@ -1273,6 +1279,29 @@ async def get_resolution_time():
     }
 
 
+@app.get("/api/analytics/resolution-by-hour-opened")
+async def get_resolution_by_hour_opened():
+    """Avg resolution time for requests by hour of day when they were opened (0-23)."""
+    ensure_data_loaded()
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+    df = DATA_CACHE.copy()
+    df["opened"] = pd.to_datetime(df["opened"], errors="coerce")
+    df["closed"] = pd.to_datetime(df["closed"], errors="coerce")
+    df = df[pd.notna(df["opened"]) & pd.notna(df["closed"])]
+    df["resolution_hours"] = (df["closed"] - df["opened"]).dt.total_seconds() / 3600
+    df = df[(df["resolution_hours"] >= 0) & (df["resolution_hours"] < 8760)]
+    df["hour_opened"] = df["opened"].dt.hour
+    by_hour = df.groupby("hour_opened")["resolution_hours"].agg(["mean", "count"]).reset_index()
+    by_hour = by_hour[by_hour["count"] >= 5]
+    return {
+        "by_hour": [
+            {"hour": int(row["hour_opened"]), "avg_hours": round(float(row["mean"]), 2), "count": int(row["count"])}
+            for _, row in by_hour.iterrows()
+        ],
+    }
+
+
 @app.get("/api/analytics/anomalies")
 async def get_anomalies():
     """Detect anomalies in the last 7 days vs rolling 30-day average."""
@@ -1332,18 +1361,18 @@ async def get_anomalies():
             if deviation > 2.0:
                 events_map = _get_events_by_date_dict()
                 day_events = events_map.get(str(check_date), [])
-                possible_cause = None
+                same_day_label = None
                 if day_events:
-                    possible_cause = "Maybe due to: " + ", ".join(day_events[:3])
+                    same_day_label = "Same-day events: " + ", ".join(day_events[:3])
                     if len(day_events) > 3:
-                        possible_cause += "..."
+                        same_day_label += "..."
                 anomalies.append({
                     'date': str(check_date),
                     'category': cat,
                     'actual_count': int(actual),
                     'expected_count': round(float(avg), 1),
                     'deviation_factor': round(float(deviation), 2),
-                    'possible_event_cause': possible_cause,
+                    'possible_event_cause': same_day_label,  # frontend key; label is now "same-day" not "cause"
                 })
 
     # Sort by deviation factor descending
@@ -1353,6 +1382,52 @@ async def get_anomalies():
         'period': {'start': str(recent_start), 'end': str(max_date)},
         'anomalies': anomalies,
     }
+
+
+def _map_data_from_df(df: pd.DataFrame, category: Optional[str], district: Optional[int]) -> dict:
+    """Build map categories from a DataFrame with latitude/longitude (or lat/lon)."""
+    if df is None or df.empty:
+        return {'categories': [], 'total_points': 0}
+    df = df.copy()
+    if category:
+        df = df[df['category'] == category]
+    if district is not None:
+        dist_col = 'supervisor_district' if 'supervisor_district' in df.columns else 'district'
+        if dist_col in df.columns:
+            df['_d'] = pd.to_numeric(df[dist_col], errors='coerce')
+            df = df[df['_d'] == district]
+            df = df.drop(columns=['_d'], errors='ignore')
+    lat_col, lon_col = None, None
+    for pair in [('lat', 'long'), ('lat', 'lon'), ('latitude', 'longitude')]:
+        if pair[0] in df.columns and pair[1] in df.columns:
+            lat_col, lon_col = pair[0], pair[1]
+            break
+    if 'point' in df.columns and (lat_col is None or lon_col is None):
+        df['latitude'] = df['point'].apply(
+            lambda x: float(x['coordinates'][1]) if isinstance(x, dict) and x and 'coordinates' in x else np.nan
+        )
+        df['longitude'] = df['point'].apply(
+            lambda x: float(x['coordinates'][0]) if isinstance(x, dict) and x and 'coordinates' in x else np.nan
+        )
+        lat_col, lon_col = 'latitude', 'longitude'
+    if lat_col is None or lon_col is None:
+        return {'categories': [], 'total_points': 0, 'message': 'No coordinate columns found'}
+    df[lat_col] = pd.to_numeric(df[lat_col], errors='coerce')
+    df[lon_col] = pd.to_numeric(df[lon_col], errors='coerce')
+    df = df[pd.notna(df[lat_col]) & pd.notna(df[lon_col])]
+    df = df[(df[lat_col] > 37.5) & (df[lat_col] < 38.0) & (df[lon_col] > -123.0) & (df[lon_col] < -122.0)]
+    if df.empty:
+        return {'categories': [], 'total_points': 0}
+    top_cats = df['category'].value_counts().head(10).index.tolist()
+    color_map = {c: CATEGORY_COLORS[i] for i, c in enumerate(top_cats)}
+    result = []
+    total_points = 0
+    for cat in top_cats:
+        cat_df = df[df['category'] == cat]
+        points = [{'lat': float(row[lat_col]), 'lon': float(row[lon_col])} for _, row in cat_df.iterrows()]
+        total_points += len(points)
+        result.append({'category': cat, 'points': points, 'count': len(points), 'color': color_map[cat]})
+    return {'categories': result, 'total_points': total_points, 'format': 'points'}
 
 
 @app.get("/api/analytics/map-data")
@@ -1367,9 +1442,9 @@ async def get_map_data(
     days = _days_in_range(start_date, end_date)
     use_heatmap = format == "heatmap" or (days is not None and days > RAW_CUTOFF_DAYS)
 
-    # Try heatmap from grid_agg for long ranges
+    # Try heatmap from grid_agg only for long ranges (so short range keeps point clusters)
+    ensure_aggregates_loaded()
     if use_heatmap:
-        ensure_aggregates_loaded()
         if AGGREGATES_CACHE and 'grid_agg' in AGGREGATES_CACHE:
             grid = AGGREGATES_CACHE['grid_agg'].copy()
             grid = _filter_agg_date_range(grid, 'year_month', start_date, end_date)
@@ -1396,66 +1471,23 @@ async def get_map_data(
 
     # Use raw/recent data for points
     ensure_data_loaded()
+    df = None
+    if DATA_CACHE is not None and not DATA_CACHE.empty:
+        df = DATA_CACHE.copy()
+        df = _filter_date_range(df, start_date, end_date)
+        out = _map_data_from_df(df, category, district)
+        if out.get('categories'):
+            return out
+    # Fallback: use recent_raw from aggregates (has lat/lon for map)
+    if AGGREGATES_CACHE and 'recent_raw' in AGGREGATES_CACHE:
+        df = AGGREGATES_CACHE['recent_raw'].copy()
+        df = _filter_date_range(df, start_date, end_date)
+        out = _map_data_from_df(df, category, district)
+        if out.get('categories'):
+            return out
     if DATA_CACHE is None or DATA_CACHE.empty:
         raise HTTPException(status_code=503, detail="No data available")
-
-    df = DATA_CACHE.copy()
-    df = _filter_date_range(df, start_date, end_date)
-    if category:
-        df = df[df['category'] == category]
-    if district is not None:
-        dist_col = 'supervisor_district' if 'supervisor_district' in df.columns else 'district'
-        if dist_col in df.columns:
-            df['district_num'] = pd.to_numeric(df[dist_col], errors='coerce')
-            df = df[df['district_num'] == district]
-
-    lat_col, lon_col = None, None
-    if 'lat' in df.columns and 'long' in df.columns:
-        lat_col, lon_col = 'lat', 'long'
-    elif 'lat' in df.columns and 'lon' in df.columns:
-        lat_col, lon_col = 'lat', 'lon'
-    elif 'latitude' in df.columns and 'longitude' in df.columns:
-        lat_col, lon_col = 'latitude', 'longitude'
-    elif 'point' in df.columns:
-        df['latitude'] = df['point'].apply(
-            lambda x: float(x['coordinates'][1]) if isinstance(x, dict) and x and 'coordinates' in x else np.nan
-        )
-        df['longitude'] = df['point'].apply(
-            lambda x: float(x['coordinates'][0]) if isinstance(x, dict) and x and 'coordinates' in x else np.nan
-        )
-        lat_col, lon_col = 'latitude', 'longitude'
-    else:
-        return {'categories': [], 'total_points': 0, 'message': 'No coordinate columns found'}
-
-    df[lat_col] = pd.to_numeric(df[lat_col], errors='coerce')
-    df[lon_col] = pd.to_numeric(df[lon_col], errors='coerce')
-    df = df[pd.notna(df[lat_col]) & pd.notna(df[lon_col])]
-    df = df[(df[lat_col] > 37.5) & (df[lat_col] < 38.0) &
-            (df[lon_col] > -123.0) & (df[lon_col] < -122.0)]
-
-    if df.empty:
-        return {'categories': [], 'total_points': 0}
-
-    top_cats = df['category'].value_counts().head(10).index.tolist()
-    color_map = {cat: CATEGORY_COLORS[i] for i, cat in enumerate(top_cats)}
-
-    result = []
-    total_points = 0
-    for cat in top_cats:
-        cat_df = df[df['category'] == cat]
-        points = [
-            {'lat': float(row[lat_col]), 'lon': float(row[lon_col])}
-            for _, row in cat_df.iterrows()
-        ]
-        total_points += len(points)
-        result.append({
-            'category': cat,
-            'points': points,
-            'count': len(points),
-            'color': color_map[cat],
-        })
-
-    return {'categories': result, 'total_points': total_points, 'format': 'points'}
+    return {'categories': [], 'total_points': 0, 'message': 'No geographic data in this range. Try heatmap or ensure data/aggregates includes grid_agg or recent_raw with coordinates.'}
 
 
 @app.get("/api/analytics/compare-periods")
@@ -1541,18 +1573,29 @@ if frontend_path.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
     logger.info(f"Serving frontend from {frontend_path}")
 
-    @app.get("/")
-    async def serve_frontend():
-        """Serve the frontend dashboard"""
+    def _serve_index():
         index_file = frontend_path / "index.html"
         if index_file.exists():
-            return FileResponse(index_file)
-        return {
-            "service": "SF 311 Predictor API",
-            "version": "1.0.0",
-            "docs": "/docs",
-            "health": "/health",
-        }
+            return FileResponse(
+                index_file,
+                headers={"Cache-Control": "no-cache, max-age=0"},
+            )
+        return JSONResponse(
+            {"service": "SF 311 Predictor API", "version": "1.0.0", "docs": "/docs", "health": "/health"},
+            status_code=404,
+        )
+
+    @app.get("/")
+    async def serve_frontend():
+        """Serve the frontend dashboard at root."""
+        return _serve_index()
+
+    @app.get("/frontend")
+    @app.get("/frontend/")
+    @app.get("/frontend/index.html")
+    async def serve_frontend_path():
+        """Serve the frontend dashboard at /frontend/index.html (deploy script URL)."""
+        return _serve_index()
 
 
 # ---------------------------------------------------------------------------
