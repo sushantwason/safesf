@@ -335,6 +335,21 @@
     <script>
         const API_URL = window.location.origin;  // Adjust for your deployment
 
+        // San Francisco Supervisor District names
+        const DISTRICT_NAMES = {
+            1: 'Richmond',
+            2: 'Marina, Cow Hollow',
+            3: 'North Beach, Chinatown',
+            4: 'Sunset',
+            5: 'Haight-Ashbury, Fillmore',
+            6: 'SOMA, Tenderloin',
+            7: 'Mission, Bernal Heights',
+            8: 'Castro, Noe Valley',
+            9: 'Mission, Portola',
+            10: 'Potrero Hill, Bayview',
+            11: 'Excelsior, Outer Mission'
+        };
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async () => {
             await checkHealth();
@@ -587,8 +602,12 @@
 
                 const tbody = document.getElementById('recentRequestsTable');
                 tbody.innerHTML = data.data.map(req => {
-                    const districtDisplay = req.district !== null && req.district !== undefined ?
-                        Math.floor(req.district) : 'N/A';
+                    let districtDisplay = 'N/A';
+                    if (req.district !== null && req.district !== undefined) {
+                        const districtNum = Math.floor(req.district);
+                        const neighborhoodName = DISTRICT_NAMES[districtNum];
+                        districtDisplay = neighborhoodName ? `D${districtNum}: ${neighborhoodName}` : `D${districtNum}`;
+                    }
                     return `
                     <tr class="border-b hover:bg-gray-50">
                         <td class="px-4 py-2 text-sm">${req.opened ? new Date(req.opened).toLocaleDateString() : 'N/A'}</td>
@@ -629,7 +648,11 @@
                     .sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
 
                 const trace = {
-                    x: districts.map(d => `District ${d[0]}`),
+                    x: districts.map(d => {
+                        const districtNum = d[0];
+                        const name = DISTRICT_NAMES[districtNum] || `District ${districtNum}`;
+                        return `D${districtNum}: ${name}`;
+                    }),
                     y: districts.map(d => d[1]),
                     type: 'bar',
                     marker: { color: '#10b981' }
@@ -637,9 +660,12 @@
 
                 const layout = {
                     title: 'Requests by Supervisor District',
-                    xaxis: { title: 'District' },
+                    xaxis: {
+                        title: 'District',
+                        tickangle: -45
+                    },
                     yaxis: { title: 'Number of Requests' },
-                    margin: { t: 40, r: 20, b: 60, l: 60 }
+                    margin: { t: 40, r: 20, b: 120, l: 60 }
                 };
 
                 Plotly.newPlot('geographicChart', [trace], layout, { responsive: true });
