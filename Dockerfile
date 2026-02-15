@@ -38,8 +38,9 @@ COPY scripts/ ./scripts/
 COPY models/ ./models/
 COPY .env.example .env
 
-# Create data directory (data now loaded from GCS, not local files)
-RUN mkdir -p data
+# Create data directories; copy pre-built aggregates (run fetch_events before build)
+RUN mkdir -p data data/aggregates
+COPY data/aggregates/ ./data/aggregates/
 
 # Expose port
 EXPOSE 8080

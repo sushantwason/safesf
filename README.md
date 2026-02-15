@@ -71,6 +71,15 @@ cp .env.example .env
 # Fetch historical 311 data
 python scripts/fetch_data.py --start-date 2020-01-01 --end-date 2026-02-14
 
+# Build pre-aggregated tables (for 5+ year lookback with minimal storage)
+# Run after fetch_data or use --gcs-url for existing data
+python scripts/build_aggregates.py --input data/311_raw.parquet --output-dir data/aggregates
+# Or from GCS sample:
+python scripts/build_aggregates.py --gcs-url "https://storage.googleapis.com/sf-311-data-personal/311_sample.parquet" --output-dir data/aggregates
+
+# Fetch DataSF event data (Our415 + Street Closures) for 311 correlation
+python scripts/fetch_events.py --days 365
+
 # Load into BigQuery
 python scripts/load_to_bigquery.py
 

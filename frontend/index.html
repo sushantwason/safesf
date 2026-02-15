@@ -10,7 +10,10 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     <style>
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
         .tab-btn.active { color: #2563eb; border-bottom: 2px solid #2563eb; }
@@ -43,13 +46,29 @@
         </div>
     </nav>
 
-    <!-- Category Filter Bar -->
+    <!-- Category + District Filter Bar (drill-down) -->
     <div class="fixed top-14 left-0 right-0 z-40 bg-gray-50 border-b border-gray-200 h-10">
-        <div class="max-w-7xl mx-auto px-4 h-full flex items-center">
-            <label class="text-xs text-gray-500 mr-2 font-medium">Category:</label>
+        <div class="max-w-7xl mx-auto px-4 h-full flex items-center gap-4">
+            <label class="text-xs text-gray-500 font-medium">Category:</label>
             <select id="globalCategoryFilter" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
                 <option value="">All Categories</option>
             </select>
+            <label class="text-xs text-gray-500 font-medium ml-2">District:</label>
+            <select id="globalDistrictFilter" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
+                <option value="">All Districts</option>
+                <option value="1">D1 Richmond</option>
+                <option value="2">D2 Marina, Cow Hollow</option>
+                <option value="3">D3 North Beach, Chinatown</option>
+                <option value="4">D4 Sunset</option>
+                <option value="5">D5 Haight, Fillmore</option>
+                <option value="6">D6 SOMA, Tenderloin</option>
+                <option value="7">D7 Mission, Bernal</option>
+                <option value="8">D8 Castro, Noe Valley</option>
+                <option value="9">D9 Mission, Portola</option>
+                <option value="10">D10 Potrero, Bayview</option>
+                <option value="11">D11 Excelsior, Outer Mission</option>
+            </select>
+            <button id="clearDrillDown" class="text-xs text-blue-600 hover:text-blue-800 font-medium hidden">Clear filters</button>
         </div>
     </div>
 
@@ -174,6 +193,15 @@
 
         <!-- Tab: Insights -->
         <div data-tab-content="insights" class="hidden">
+            <!-- Event Correlation (DataSF) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">311 Volume vs City Events (DataSF)</h3>
+                <p class="text-xs text-gray-500 mb-3">Correlates request volume with Our415 events and street closures</p>
+                <div id="eventCorrelation" class="text-sm text-gray-600">
+                    <p class="text-gray-400">Loading...</p>
+                </div>
+            </div>
+
             <!-- District Hotspots -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">District Hotspots by Category</h3>
@@ -189,10 +217,19 @@
             </div>
 
             <!-- Comparative Period Summary -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
                 <h3 class="text-sm font-semibold text-gray-900 mb-4">Comparative Period Summary</h3>
                 <div id="comparativeSummary" class="text-sm text-gray-600">
                     <p class="text-gray-400 text-center py-4">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Compare Periods (this month vs same month last year) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 class="text-sm font-semibold text-gray-900 mb-4">Compare Periods</h3>
+                <p class="text-xs text-gray-500 mb-3">Compare this month to the same month last year</p>
+                <div id="comparePeriodsResult" class="text-sm text-gray-600">
+                    <p class="text-gray-400">Loading...</p>
                 </div>
             </div>
         </div>
@@ -242,6 +279,7 @@
     let leafletMap = null;
     let mapLayerGroups = {};
     let mapData = null;
+    let mapMarkerClusters = {};
 
     // ---- Utility functions ----
 
@@ -355,10 +393,12 @@
 
             if (anomalies.length > 0) {
                 document.getElementById('anomalyAlerts').classList.remove('hidden');
-                document.getElementById('anomalyList').innerHTML = anomalies.slice(0, 5).map(a =>
-                    '<p>' + a.category + ' spiked ' + a.deviation_factor + 'x above normal on ' + a.date +
-                    ' (' + a.actual_count + ' vs expected ' + a.expected_count + ')</p>'
-                ).join('');
+                document.getElementById('anomalyList').innerHTML = anomalies.slice(0, 5).map(a => {
+                    let html = '<p>' + a.category + ' spiked ' + a.deviation_factor + 'x above normal on ' + a.date +
+                        ' (' + a.actual_count + ' vs expected ' + a.expected_count + ')';
+                    if (a.possible_event_cause) html += '<br><span class="text-blue-600 text-xs">' + a.possible_event_cause + '</span>';
+                    return html + '</p>';
+                }).join('');
             }
         } else if (timeseries && timeseries.dates && timeseries.counts) {
             // Fallback: client-side detection from timeseries
@@ -434,9 +474,18 @@
     }
 
     function renderVolumeChart(ts) {
+        const eventsByDate = ts.events_by_date || {};
+        const hoverText = ts.dates.map((d, i) => {
+            const cnt = (ts.counts[i] || 0).toLocaleString();
+            const ev = eventsByDate[d];
+            if (ev && ev.length) return d + '<br>' + cnt + ' requests<br><b>Events:</b> ' + ev.join(', ');
+            return d + '<br>' + cnt + ' requests';
+        });
         const trace = {
             x: ts.dates,
             y: ts.counts,
+            text: hoverText,
+            hoverinfo: 'text',
             type: 'scatter',
             mode: 'lines+markers',
             line: { color: '#2563eb', width: 2 },
@@ -446,7 +495,7 @@
             margin: { t: 10, r: 20, b: 40, l: 50 },
             xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb' },
             yaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Requests', font: { size: 11 } } },
-            hovermode: 'x unified',
+            hovermode: 'closest',
         });
         Plotly.newPlot('volumeChart', [trace], layout, CHART_CONFIG);
     }
@@ -466,6 +515,16 @@
             xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Count', font: { size: 11 } } },
         });
         Plotly.newPlot('categoriesChart', [trace], layout, CHART_CONFIG);
+        document.getElementById('categoriesChart').on('plotly_click', (data) => {
+            if (data.points && data.points[0] && data.points[0].y) {
+                const cat = data.points[0].y;
+                document.getElementById('globalCategoryFilter').value = cat;
+                updateClearFiltersVisibility();
+                tabDataLoaded.map = false;
+                loadTabData('map');
+                document.querySelector('.tab-btn[data-tab="map"]').click();
+            }
+        });
     }
 
     function renderDistrictBreakdown(districts) {
@@ -484,6 +543,21 @@
             xaxis: { gridcolor: '#f3f4f6', linecolor: '#e5e7eb', title: { text: 'Count', font: { size: 11 } } },
         });
         Plotly.newPlot('districtChart', [trace], layout, CHART_CONFIG);
+        const districtMap = {};
+        sorted.forEach(d => { districtMap['D' + d.district + ': ' + d.name] = d.district; });
+        document.getElementById('districtChart').on('plotly_click', (data) => {
+            if (data.points && data.points[0] && data.points[0].y) {
+                const label = data.points[0].y;
+                const dist = districtMap[label];
+                if (dist != null) {
+                    document.getElementById('globalDistrictFilter').value = String(dist);
+                    updateClearFiltersVisibility();
+                    tabDataLoaded.map = false;
+                    loadTabData('map');
+                    document.querySelector('.tab-btn[data-tab="map"]').click();
+                }
+            }
+        });
     }
 
     function renderRecentTable(data) {
@@ -663,24 +737,45 @@
 
     // ---- Map Tab ----
 
-    async function loadMap() {
-        // Initialize Leaflet map
-        leafletMap = L.map('mapContainer', { zoomControl: true }).setView([37.7749, -122.4194], 12);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO',
-            maxZoom: 19,
-        }).addTo(leafletMap);
+    function getMapApiParams() {
+        const s = document.getElementById('startDate').value;
+        const e = document.getElementById('endDate').value;
+        const cat = document.getElementById('globalCategoryFilter').value;
+        const dist = document.getElementById('globalDistrictFilter').value;
+        let params = [];
+        if (s) params.push('start_date=' + s);
+        if (e) params.push('end_date=' + e);
+        if (cat) params.push('category=' + encodeURIComponent(cat));
+        if (dist) params.push('district=' + dist);
+        return params.length ? '?' + params.join('&') : '';
+    }
 
-        // Fetch map data
+    async function loadMap() {
+        // Initialize or reuse map
+        if (!leafletMap) {
+            leafletMap = L.map('mapContainer', { zoomControl: true }).setView([37.7749, -122.4194], 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                maxZoom: 19,
+            }).addTo(leafletMap);
+        } else {
+            // Clear existing layers
+            Object.values(mapLayerGroups).forEach(lg => {
+                if (leafletMap.hasLayer(lg)) leafletMap.removeLayer(lg);
+            });
+            mapLayerGroups = {};
+            mapMarkerClusters = {};
+        }
+
         try {
-            const data = await apiFetch('/api/analytics/map-data');
+            const params = getMapApiParams();
+            const data = await apiFetch('/api/analytics/map-data' + params);
             mapData = data;
             if (!data || !data.categories || data.categories.length === 0) {
                 showMapEmpty();
                 return;
             }
-            // Flatten categories into points with color info for rendering
-            renderMapCategories(data.categories);
+            renderMapCategories(data.categories, data.format === 'heatmap');
         } catch (e) {
             showMapEmpty();
         }
@@ -696,29 +791,58 @@
         container.appendChild(overlay);
     }
 
-    function renderMapCategories(categories) {
-        // categories is an array of {category, points: [{lat, lon}], count, color}
-        const categoryNames = categories.map(c => c.category);
+    function renderMapCategories(categories, isHeatmap) {
+        // categories: {category, points/cells, count, color}
         const colorMap = {};
         categories.forEach(c => { colorMap[c.category] = c.color; });
 
-        // Create layer groups per category
+        const counts = categories.map(c => {
+            const items = c.cells || c.points || [];
+            return items.reduce((sum, p) => sum + (p.count || 1), 0);
+        });
+        const maxCount = Math.max(...counts, 1);
+
         categories.forEach(catObj => {
-            const lg = L.layerGroup();
-            catObj.points.forEach(p => {
-                if (p.lat && p.lon) {
-                    L.circleMarker([p.lat, p.lon], {
-                        radius: 4,
+            if (isHeatmap && catObj.cells && catObj.cells.length > 0) {
+                // Heatmap: cells with count - larger radius for higher count
+                const lg = L.layerGroup();
+                catObj.cells.forEach(cell => {
+                    const count = cell.count || 1;
+                    const radius = Math.max(4, Math.min(20, 4 + (count / maxCount) * 16));
+                    L.circleMarker([cell.lat, cell.lon], {
+                        radius,
                         fillColor: catObj.color,
                         color: catObj.color,
                         weight: 0.5,
-                        fillOpacity: 0.6,
-                    }).bindPopup('<strong>' + catObj.category + '</strong><br>' + p.lat.toFixed(4) + ', ' + p.lon.toFixed(4))
+                        fillOpacity: 0.5,
+                    }).bindPopup('<strong>' + catObj.category + '</strong><br>' + count + ' requests')
                       .addTo(lg);
-                }
-            });
-            lg.addTo(leafletMap);
-            mapLayerGroups[catObj.category] = lg;
+                });
+                lg.addTo(leafletMap);
+                mapLayerGroups[catObj.category] = lg;
+            } else {
+                // Points: use MarkerCluster for better performance
+                const clusterGroup = L.markerClusterGroup({
+                    chunkedLoading: true,
+                    spiderfyOnMaxZoom: true,
+                    showCoverageOnHover: false,
+                });
+                (catObj.points || []).forEach(p => {
+                    if (p.lat != null && p.lon != null) {
+                        const m = L.circleMarker([p.lat, p.lon], {
+                            radius: 5,
+                            fillColor: catObj.color,
+                            color: catObj.color,
+                            weight: 0.5,
+                            fillOpacity: 0.6,
+                        }).bindPopup('<strong>' + catObj.category + '</strong><br>' + p.lat.toFixed(4) + ', ' + p.lon.toFixed(4));
+                        clusterGroup.addLayer(m);
+                    }
+                });
+                clusterGroup.addTo(leafletMap);
+                mapLayerGroups[catObj.category] = clusterGroup;
+                mapMarkerClusters[catObj.category] = clusterGroup;
+            }
         });
 
         // Render toggles
@@ -770,10 +894,29 @@
     // ---- Insights Tab ----
 
     async function loadInsights() {
-        const [insights, monthly] = await Promise.all([
+        const params = getDateParams();
+        const [insights, monthly, eventCorr] = await Promise.all([
             apiFetch('/api/analytics/category-insights').catch(() => null),
-            apiFetch('/api/analytics/monthly-trends').catch(() => null),
+            apiFetch('/api/analytics/monthly-trends' + params).catch(() => null),
+            apiFetch('/api/analytics/event-correlation' + params).catch(() => null),
         ]);
+
+        // Event correlation
+        const ecEl = document.getElementById('eventCorrelation');
+        if (eventCorr && eventCorr.event_days_avg_requests != null) {
+            const lift = eventCorr.lift_percent != null ? eventCorr.lift_percent : 0;
+            const liftColor = lift > 0 ? 'text-red-600' : lift < 0 ? 'text-green-600' : 'text-gray-600';
+            const topCats = (eventCorr.top_categories_on_event_days || []).slice(0, 5).map(c => c.category + ' (' + c.count + ')').join(', ') || '—';
+            ecEl.innerHTML =
+                '<div class="space-y-2">' +
+                '<p><span class="font-medium">Avg requests on event days:</span> ' + eventCorr.event_days_avg_requests.toLocaleString() + ' (' + (eventCorr.event_days_count || 0) + ' days)</p>' +
+                '<p><span class="font-medium">Avg requests on non-event days:</span> ' + eventCorr.non_event_days_avg_requests.toLocaleString() + ' (' + (eventCorr.non_event_days_count || 0) + ' days)</p>' +
+                '<p class="' + liftColor + ' font-medium">' + (lift > 0 ? '↑' : '') + (lift < 0 ? '↓' : '') + (lift !== 0 ? Math.abs(lift) + '%' : '0%') + ' on event days vs non-event days</p>' +
+                '<p class="text-xs text-gray-500 mt-2"><span class="font-medium">Top categories on event days:</span> ' + topCats + '</p>' +
+                '</div>';
+        } else {
+            ecEl.innerHTML = '<p class="text-gray-400">' + (eventCorr && eventCorr.message ? eventCorr.message : 'Event data not available. Run: python scripts/fetch_events.py') + '</p>';
+        }
 
         // District Hotspots
         if (insights && insights.district_hotspots && insights.district_hotspots.length > 0) {
@@ -837,6 +980,45 @@
             document.getElementById('comparativeSummary').innerHTML =
                 '<p class="text-gray-400 text-center py-4">Not enough data for comparison</p>';
         }
+
+        // Compare periods: this month vs same month last year
+        (async () => {
+            const now = new Date();
+            const thisYear = now.getFullYear();
+            const thisMonth = now.getMonth() + 1;
+            const baseStart = thisYear + '-' + String(thisMonth).padStart(2, '0') + '-01';
+            const lastDay = new Date(thisYear, thisMonth, 0).getDate();
+            const baseEnd = thisYear + '-' + String(thisMonth).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+            const compStart = (thisYear - 1) + '-' + String(thisMonth).padStart(2, '0') + '-01';
+            const compLastDay = new Date(thisYear - 1, thisMonth, 0).getDate();
+            const compEnd = (thisYear - 1) + '-' + String(thisMonth).padStart(2, '0') + '-' + String(compLastDay).padStart(2, '0');
+            try {
+                const cmp = await apiFetch('/api/analytics/compare-periods?base_start=' + baseStart + '&base_end=' + baseEnd + '&compare_start=' + compStart + '&compare_end=' + compEnd);
+                if (cmp && cmp.base_period && cmp.compare_period) {
+                    const baseTotal = cmp.base_period.total;
+                    const compTotal = cmp.compare_period.total;
+                    const pct = cmp.change_percent;
+                    const color = pct == null ? '' : (pct >= 0 ? 'text-red-600' : 'text-green-600');
+                    const arrow = pct == null ? '' : (pct >= 0 ? '&#9650;' : '&#9660;');
+                    document.getElementById('comparePeriodsResult').innerHTML =
+                        '<div class="space-y-2">' +
+                        '<p><span class="font-medium">This month (' + baseStart.slice(0, 7) + '):</span> ' + baseTotal.toLocaleString() + ' requests</p>' +
+                        '<p><span class="font-medium">Same month last year (' + compStart.slice(0, 7) + '):</span> ' + compTotal.toLocaleString() + ' requests</p>' +
+                        (pct != null ? '<p class="' + color + ' font-medium">' + arrow + ' ' + Math.abs(pct) + '% vs last year</p>' : '<p class="text-gray-500">Insufficient historical data</p>') +
+                        '</div>';
+                } else {
+                    document.getElementById('comparePeriodsResult').innerHTML = '<p class="text-gray-400">Unable to load comparison</p>';
+                }
+            } catch (e) {
+                document.getElementById('comparePeriodsResult').innerHTML = '<p class="text-gray-400">Unable to load comparison</p>';
+            }
+        })();
+    }
+
+    function updateClearFiltersVisibility() {
+        const cat = document.getElementById('globalCategoryFilter').value;
+        const dist = document.getElementById('globalDistrictFilter').value;
+        document.getElementById('clearDrillDown').classList.toggle('hidden', !cat && !dist);
     }
 
     // ---- Date Range + Category Filter ----
@@ -845,12 +1027,16 @@
         document.getElementById('applyDateRange').addEventListener('click', () => {
             tabDataLoaded.overview = false;
             tabDataLoaded.trends = false;
+            tabDataLoaded.map = false;
+            tabDataLoaded.insights = false;
             const activeTab = document.querySelector('.tab-btn.active');
             if (activeTab) loadTabData(activeTab.getAttribute('data-tab'));
         });
 
         document.getElementById('globalCategoryFilter').addEventListener('change', async (e) => {
+            updateClearFiltersVisibility();
             const cat = e.target.value;
+            tabDataLoaded.map = false;
             if (cat) {
                 try {
                     const data = await apiFetch('/api/analytics/category-timeseries?category=' + encodeURIComponent(cat));
@@ -858,7 +1044,6 @@
                         renderVolumeChart(data);
                     }
                 } catch (err) {
-                    // Fallback: just reload overview
                     tabDataLoaded.overview = false;
                     loadTabData('overview');
                 }
@@ -866,6 +1051,28 @@
                 tabDataLoaded.overview = false;
                 loadTabData('overview');
             }
+        });
+
+        document.getElementById('globalDistrictFilter').addEventListener('change', () => {
+            updateClearFiltersVisibility();
+            tabDataLoaded.overview = false;
+            tabDataLoaded.trends = false;
+            tabDataLoaded.map = false;
+            tabDataLoaded.insights = false;
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab) loadTabData(activeTab.getAttribute('data-tab'));
+        });
+
+        document.getElementById('clearDrillDown').addEventListener('click', () => {
+            document.getElementById('globalCategoryFilter').value = '';
+            document.getElementById('globalDistrictFilter').value = '';
+            updateClearFiltersVisibility();
+            tabDataLoaded.overview = false;
+            tabDataLoaded.trends = false;
+            tabDataLoaded.map = false;
+            tabDataLoaded.insights = false;
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab) loadTabData(activeTab.getAttribute('data-tab'));
         });
 
         document.getElementById('exportCsv').addEventListener('click', () => {
