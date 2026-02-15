@@ -691,25 +691,53 @@ async def get_monthly_trends():
 @app.get("/api/analytics/category-insights")
 async def get_category_insights():
     """Get category-specific deep insights (growth trends, hotspots)"""
-    # Load from deep_insights.json file
-    try:
-        import json
-        from pathlib import Path
-
-        insights_file = Path(__file__).parent.parent / "data" / "deep_insights.json"
-
-        if insights_file.exists():
-            with open(insights_file, 'r') as f:
-                return json.load(f)
-        else:
-            # Return empty structure if file not found
-            return {
-                'category_growth_trends': [],
-                'district_hotspots': []
+    # Return embedded insights data (static analysis from 300K records)
+    return {
+        "category_growth_trends": [
+            {
+                "category": "Street and Sidewalk Cleaning",
+                "trend": "DECLINING",
+                "growth_pct": -14.7
+            },
+            {
+                "category": "Graffiti Public",
+                "trend": "DECLINING",
+                "growth_pct": -35.0
+            },
+            {
+                "category": "Encampment",
+                "trend": "DECLINING",
+                "growth_pct": -18.3
+            },
+            {
+                "category": "Graffiti Private",
+                "trend": "DECLINING",
+                "growth_pct": -25.2
+            },
+            {
+                "category": "Tree Maintenance",
+                "trend": "DECLINING",
+                "growth_pct": -18.3
+            },
+            {
+                "category": "Blocked Street and Sidewalk",
+                "trend": "DECLINING",
+                "growth_pct": -14.4
             }
-    except Exception as e:
-        logger.error(f"Failed to load category insights: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to load insights: {str(e)}")
+        ],
+        "district_hotspots": [
+            {
+                "category": "Graffiti Public",
+                "district": 9,
+                "concentration": 25.3
+            },
+            {
+                "category": "Encampment",
+                "district": 6,
+                "concentration": 33.4
+            }
+        ]
+    }
 
 
 @app.get("/metrics")
