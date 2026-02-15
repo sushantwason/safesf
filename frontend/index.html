@@ -355,13 +355,10 @@
             try {
                 const response = await fetch(`${API_URL}/health`);
                 const data = await response.json();
-
-                document.getElementById('systemStatus').textContent = data.status === 'healthy' ? 'Healthy' : 'Warning';
-                document.getElementById('categoriesCount').textContent = data.categories_available.length;
-                document.getElementById('modelsCount').textContent = data.models_loaded;
+                // Health check succeeded, API is working
+                console.log('API health check:', data.status);
             } catch (error) {
                 console.error('Health check failed:', error);
-                document.getElementById('systemStatus').textContent = 'Error';
             }
         }
 
@@ -511,33 +508,20 @@
         // NEW: Historical Data Functions
         async function loadHistoricalTrends() {
             try {
-                const response = await fetch(`${API_URL}/api/data/stats`);
+                // Get daily time series data
+                const response = await fetch(`${API_URL}/api/data/daily-timeseries`);
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
+                }
                 const data = await response.json();
 
-                // Get recent data to build time series
-                const recentResponse = await fetch(`${API_URL}/api/data/recent?limit=1000`);
-                const recentData = await recentResponse.json();
-
-                // Group by date
-                const dateGroups = {};
-                recentData.data.forEach(req => {
-                    if (req.opened && typeof req.opened === 'string') {
-                        try {
-                            const date = req.opened.split('T')[0];
-                            dateGroups[date] = (dateGroups[date] || 0) + 1;
-                        } catch (e) {
-                            // Skip malformed dates, log for debugging
-                            console.warn('Invalid date format:', req.opened, e);
-                        }
-                    }
-                });
-
-                const dates = Object.keys(dateGroups).sort();
-                const volumes = dates.map(d => dateGroups[d]);
+                if (!data.dates || !data.counts || data.dates.length === 0) {
+                    throw new Error('No time series data available');
+                }
 
                 const trace = {
-                    x: dates,
-                    y: volumes,
+                    x: data.dates,
+                    y: data.counts,
                     type: 'scatter',
                     mode: 'lines+markers',
                     name: 'Daily Requests',
@@ -558,7 +542,7 @@
             } catch (error) {
                 console.error('Failed to load historical trends:', error);
                 document.getElementById('historicalVolumeChart').innerHTML =
-                    '<p class="text-red-600 p-4">Error loading trend data</p>';
+                    '<p class="text-red-600 p-4">Error loading trend data: ' + error.message + '</p>';
             }
         }
 

@@ -490,6 +490,28 @@ async def get_data_stats():
     }
 
 
+@app.get("/api/data/daily-timeseries")
+async def get_daily_timeseries():
+    """Get daily aggregated request counts"""
+    global DATA_CACHE
+
+    if DATA_CACHE is None or DATA_CACHE.empty:
+        raise HTTPException(status_code=503, detail="No data available")
+
+    # Group by date
+    df = DATA_CACHE.copy()
+    df['date'] = pd.to_datetime(df['opened']).dt.date
+
+    daily_counts = df.groupby('date').size().reset_index(name='count')
+    daily_counts = daily_counts.sort_values('date')
+
+    return {
+        'dates': [str(d) for d in daily_counts['date'].tolist()],
+        'counts': daily_counts['count'].tolist(),
+        'total_days': len(daily_counts)
+    }
+
+
 @app.get("/metrics")
 async def get_metrics():
     """Prometheus-style metrics endpoint"""
