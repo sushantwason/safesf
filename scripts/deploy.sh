@@ -67,16 +67,23 @@ echo "📊 Dashboard: ${SERVICE_URL}/frontend/index.html"
 echo "📖 API Docs: ${SERVICE_URL}/docs"
 echo ""
 
-# Set up Cloud Scheduler for daily data sync (optional)
+# Set up Cloud Scheduler for daily data sync (optional; skip if job exists or creation fails)
 echo "⏰ Setting up daily data sync (Cloud Scheduler)..."
-gcloud scheduler jobs create http sf-311-daily-sync \
-    --location ${REGION} \
-    --schedule "0 6 * * *" \
-    --uri "${SERVICE_URL}/api/sync" \
-    --http-method POST \
-    --oidc-service-account-email "${PROJECT_ID}@appspot.gserviceaccount.com" \
-    --time-zone "America/Los_Angeles" \
-    || echo "⚠️  Scheduler job might already exist or needs manual setup"
+if gcloud scheduler jobs describe sf-311-daily-sync --location "${REGION}" &>/dev/null; then
+    echo "  Scheduler job sf-311-daily-sync already exists; skipping."
+else
+    # Use --no-oidc-token so we don't require App Engine SA (project may not have one).
+    # Your Cloud Run service allows unauthenticated, so the POST will succeed.
+    gcloud scheduler jobs create http sf-311-daily-sync \
+        --location "${REGION}" \
+        --schedule "0 6 * * *" \
+        --uri "${SERVICE_URL}/api/sync" \
+        --http-method POST \
+        --no-oidc-token \
+        --time-zone "America/Los_Angeles" \
+        && echo "  Created sf-311-daily-sync." \
+        || echo "⚠️  Scheduler creation failed (e.g. API or location). Create manually in Console if needed."
+fi
 
 echo ""
 echo "🎉 All done! Your SF 311 Predictor is live!"
