@@ -38,13 +38,15 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--memory'
-      - '2Gi'
+      - '512Mi'
       - '--cpu'
-      - '2'
+      - '1'
+      - '--cpu-throttling'
+      - '--no-cpu-boost'
       - '--timeout'
       - '300'
       - '--max-instances'
-      - '10'
+      - '4'
       - '--min-instances'
       - '0'
       - '--set-env-vars'
@@ -57,5 +59,5 @@ images:
 timeout: 1800s
 
 options:
-  machineType: 'E2_HIGHCPU_8'
+  machineType: 'E2_MEDIUM'
   logging: CLOUD_LOGGING_ONLY

@@ -25,13 +25,12 @@ fi
 echo "📝 Setting GCP project..."
 gcloud config set project ${PROJECT_ID}
 
-# Enable required APIs
+# Enable required APIs (only what's needed)
 echo "🔧 Enabling required GCP APIs..."
 gcloud services enable \
     cloudbuild.googleapis.com \
     run.googleapis.com \
     containerregistry.googleapis.com \
-    bigquery.googleapis.com \
     storage-api.googleapis.com \
     cloudscheduler.googleapis.com \
     logging.googleapis.com \
@@ -41,17 +40,19 @@ gcloud services enable \
 echo "🏗️  Building container image..."
 gcloud builds submit --tag ${IMAGE_NAME}:latest .
 
-# Deploy to Cloud Run
+# Deploy to Cloud Run (CPU only during requests, right-sized)
 echo "☁️  Deploying to Cloud Run..."
 gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_NAME}:latest \
     --region ${REGION} \
     --platform managed \
     --allow-unauthenticated \
-    --memory 2Gi \
-    --cpu 2 \
+    --memory 512Mi \
+    --cpu 1 \
+    --cpu-throttling \
+    --no-cpu-boost \
     --timeout 300 \
-    --max-instances 10 \
+    --max-instances 4 \
     --min-instances 0 \
     --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION}"
 
