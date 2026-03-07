@@ -24,6 +24,13 @@ steps:
       - 'gcr.io/$PROJECT_ID/sf-311-predictor:latest'
 
   # Deploy container image to Cloud Run
+  # NOTE: --no-allow-unauthenticated requires IAM-based access control.
+  # Grant 'roles/run.invoker' to authorized users/service accounts via:
+  #   gcloud run services add-iam-policy-binding sf-311-predictor \
+  #     --region=us-west1 \
+  #     --member="user:you@example.com" \
+  #     --role="roles/run.invoker"
+  # For a public API, use Cloud Endpoints or API Gateway with auth instead.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -36,7 +43,7 @@ steps:
       - 'us-west1'
       - '--platform'
       - 'managed'
-      - '--allow-unauthenticated'
+      - '--no-allow-unauthenticated'
       - '--memory'
       - '512Mi'
       - '--cpu'
